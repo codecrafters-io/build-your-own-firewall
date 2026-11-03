@@ -1,10 +1,12 @@
 hints:
   - title_markdown: "How do I inspect a request without changing it?"
     body_markdown: |-
-      Read `r.Body` with `io.ReadAll`, then use `json.Unmarshal` to inspect
-      `messages[].content`. Iterate over policy entries first so policy order
-      decides the match. Use `strings.Contains` for literal matching. Before
-      forwarding, restore `r.Body` with `io.NopCloser(bytes.NewReader(body))`.
+      Read `r.Body` with `io.ReadAll`, then decode each `messages[].content` into
+      a `json.RawMessage`. Skip `null`, try a `string`, then try a list of parts
+      with `type` and `text`. If none fits, return `400`. Iterate over policy
+      entries first so policy order decides the match. Use `strings.Contains`
+      for literal matching. Before forwarding, restore `r.Body` with
+      `io.NopCloser(bytes.NewReader(body))`.
   - title_markdown: "Where should the policy decision happen?"
     body_markdown: |-
       Read the policy file with `os.ReadFile` at startup and decode its JSON.

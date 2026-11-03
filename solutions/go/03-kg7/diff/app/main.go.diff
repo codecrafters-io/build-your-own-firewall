@@ -1,4 +1,4 @@
-@@ -1,46 +1,105 @@
+@@ -1,46 +1,139 @@
  package main
 
  import (
@@ -14,6 +14,44 @@
 +	"strings"
  )
 
++// messageTexts returns every string the model reads from the request's messages.
++// It reports false when the request can't be inspected, so the caller fails closed.
++func messageTexts(body []byte) ([]string, bool) {
++	var request struct {
++		Messages []struct {
++			Content json.RawMessage `json:"content"`
++		} `json:"messages"`
++	}
++	if json.Unmarshal(body, &request) != nil || request.Messages == nil {
++		return nil, false
++	}
++	var texts []string
++	for _, message := range request.Messages {
++		if len(message.Content) == 0 || string(message.Content) == "null" {
++			continue
++		}
++		var text string
++		if json.Unmarshal(message.Content, &text) == nil {
++			texts = append(texts, text)
++			continue
++		}
++		var parts []struct {
++			Type string  `json:"type"`
++			Text *string `json:"text"`
++		}
++		if json.Unmarshal(message.Content, &parts) != nil {
++			return nil, false
++		}
++		for _, part := range parts {
++			if part.Type != "text" || part.Text == nil {
++				return nil, false
++			}
++			texts = append(texts, *part.Text)
++		}
++	}
++	return texts, true
++}
++
  func main() {
  	origin := flag.String("origin", "", "Origin chat completions API URL")
  	flag.String("detector", "", "Classifier service URL")
@@ -58,19 +96,15 @@
 +			http.Error(w, "Could not read request", http.StatusBadRequest)
 +			return
 +		}
-+		var request struct {
-+			Messages []struct {
-+				Content string `json:"content"`
-+			} `json:"messages"`
-+		}
-+		if err := json.Unmarshal(body, &request); err != nil {
-+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
++		texts, ok := messageTexts(body)
++		if !ok {
++			http.Error(w, "Could not inspect request", http.StatusBadRequest)
 +			return
 +		}
 +		matchedRule := ""
 +		for _, rule := range policy.Denylist {
-+			for _, message := range request.Messages {
-+				if strings.Contains(message.Content, rule.Term) {
++			for _, text := range texts {
++				if strings.Contains(text, rule.Term) {
 +					matchedRule = rule.ID
 +					break
 +				}

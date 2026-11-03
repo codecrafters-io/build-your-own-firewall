@@ -5,6 +5,26 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
+def message_texts(body):
+    """Return every string the model reads, or None if the request can't be inspected."""
+    try:
+        texts = []
+        for message in json.loads(body)["messages"]:
+            content = message.get("content")
+            if isinstance(content, str):
+                texts.append(content)
+            elif isinstance(content, list):
+                for part in content:
+                    if part.get("type") != "text" or not isinstance(part.get("text"), str):
+                        return None
+                    texts.append(part["text"])
+            elif content is not None:
+                return None
+        return texts
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--origin")
@@ -25,12 +45,15 @@ def main():
                 self.send_error(404)
                 return
             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-            messages = json.loads(body).get("messages", [])
+            texts = message_texts(body)
+            if texts is None:
+                self.send_error(400, "Could not inspect request")
+                return
             matched_rule = next(
                 (
                     rule["id"]
                     for rule in policy.get("denylist", [])
-                    if any(rule["term"] in message["content"] for message in messages)
+                    if any(rule["term"] in text for text in texts)
                 ),
                 "",
             )

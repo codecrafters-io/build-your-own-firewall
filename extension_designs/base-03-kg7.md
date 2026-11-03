@@ -22,6 +22,14 @@ original body, and avoid concatenating messages or scanning other JSON fields.
 Normalization belongs to later stages. Empty policies continue to work with the
 earlier stages.
 
+The design names fail-closed as this stage's first concept. Content may be a
+string, a list of text parts, or null, which are the forms the SDK sends for
+plain prompts, multi-part prompts, and tool-call history. Inspect each text part
+separately. A request the firewall cannot inspect (invalid JSON, no `messages`
+list, or any other content form, such as an image part) gets HTTP 400 in either
+mode and never reaches the origin. Matching runs on decoded JSON strings, so a
+`\u` escape cannot hide a term from the filter.
+
 Blocked responses contain an `error` object with `type: firewall_block`, the
 matched `rule`, and a nonempty `message`. Do not require fixed wording or JSON
 key order. Log mode preserves the upstream response and sets only the match
@@ -48,16 +56,19 @@ scoreboard remain separate course work, as recorded for earlier stages.
 Four learner scenarios cover the worked denial, conversation history with a
 different rule, clean message boundaries, and a log-mode sequence. The last
 scenario has a matching request followed by a clean one to catch stale headers.
-The two policies use different terms and rule IDs.
+The two policies use different terms and rule IDs. Fail-closed cases add a
+denied text part, an escaped denied term, clean tool-call history with null
+content, an image part, and invalid JSON in both modes.
 
 Record golden regressions for an unfiltered proxy, forwarding before or shortly
 after a denial, incorrect status or error JSON, incorrect rule IDs, user-only
 scanning, scanning the whole JSON, concatenating messages, case folding,
-blocking log matches, absent or stale headers, and rewritten traffic. Count all
-origin requests, not just successful client replies. Observe for 200 ms after
-each denial to catch the explicit delayed-forwarding regression. This finite
-observation window is a test bound, not proof against arbitrarily delayed
-traffic.
+blocking log matches, absent or stale headers, rewritten traffic, skipped text
+parts, raw-byte matching that misses `\u` escapes, crashing on null content, and
+forwarding requests that cannot be inspected. Count all origin requests, not
+just successful client replies. Observe for 200 ms after each denial to catch
+the explicit delayed-forwarding regression. This finite observation window is a
+test bound, not proof against arbitrarily delayed traffic.
 
 Run all implemented stages with Go and Python platform scripts. Confirm the
 previous solutions fail this stage. Repeat the reference and origin-leak

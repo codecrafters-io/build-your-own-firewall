@@ -26,11 +26,21 @@ Read the file supplied by `--policy` as JSON when your program starts:
 }
 ```
 
-Each entry gives a rule's `id` and a denied `term`. Inspect the decoded string
-in every message's `content`, regardless of its role. A match is a literal,
-case-sensitive substring within one message. Don't join messages or inspect
-other fields, such as `model`. Each tested matching request matches just one
-entry, so you can stop at the first matching rule.
+Each entry gives a rule's `id` and a denied `term`. Inspect the text in every
+message's `content`, regardless of its role. A message's `content` takes one of
+three forms:
+
+| `content`                                               | Text to inspect               |
+| ------------------------------------------------------- | ----------------------------- |
+| A string                                                | The string                    |
+| A list of parts, each `{"type": "text", "text": "..."}` | Each part's `text` on its own |
+| `null` or absent, as in a tool-call message             | None                          |
+
+Inspect the decoded JSON strings, not the raw request bytes. A client can write
+`i` as `\u0069`, and your JSON parser turns both into the same text. A match is
+a literal, case-sensitive substring within one string. Don't join messages or
+parts, or inspect other fields, such as `model`. Each tested matching request
+matches just one entry, so you can stop at the first matching rule.
 
 In `block` mode, a match returns HTTP `403` with
 `Content-Type: application/json` and an `error` object. Set `error.type` to
@@ -39,9 +49,21 @@ In `block` mode, a match returns HTTP `403` with
 Return before contacting the origin.
 
 In `log` mode, forward a matching request unchanged and add the response header
-`X-Firewall-Match` with the selected rule's ID. Relay the origin's response
-unchanged otherwise. Requests without a match pass through in either mode and
-have no `X-Firewall-Match` header, including after a matching request.
+`X-Firewall-Match` with the selected rule's ID. Otherwise, relay the origin's
+response as in earlier stages. Requests without a match pass through in either
+mode and have no `X-Firewall-Match` header, including after a matching request.
+
+### Fail closed
+
+A firewall that can't inspect a request must not forward it. Otherwise, an
+attacker only needs a request shape your parser skips. In either mode, return
+HTTP `400` without contacting the origin when:
+
+- The body isn't valid JSON, or has no `messages` list.
+- A message's `content` isn't one of the three forms above. For example, an
+  image part has no text you can inspect.
+
+The body of your `400` response is up to you.
 
 ### Tests
 
@@ -75,17 +97,21 @@ an error like this, without making an origin request:
 ```
 
 The tester also checks another denylist entry in conversation history, clean
-messages and message boundaries, and log mode followed by a clean request. For
-log mode, it restarts your program with a different rule and `mode: "log"`. Each
-API request has a three-second deadline. Keep health checks and the request and
-response preservation from earlier stages working.
+messages and message boundaries, a denied term inside a text part, a denied term
+written with a JSON `\u` escape, and a clean conversation containing a tool call
+with `null` content. It sends an image part and invalid JSON, and expects HTTP
+`400` with no origin request. For log mode, it restarts your program with a
+different rule and `mode: "log"`, then sends a match, a clean request, and
+invalid JSON. Each API request has a three-second deadline. Keep health checks
+and the request and response preservation from earlier stages working.
 
 ### Notes
 
-- Inputs are valid JSON with string message contents, valid modes, unique rule
-  IDs, and nonempty terms. An empty policy (`{}`) has no rules.
-- This stage uses literal matching. Uppercase text and other spellings can pass
-  the filter. It does not establish that an allowed prompt is safe.
+- Policies are valid, with a valid mode, unique rule IDs, and nonempty terms. An
+  empty policy (`{}`) has no rules.
+- This stage uses literal matching. Uppercase text, other spellings, and a term
+  split across messages or parts can pass the filter. It does not establish that
+  an allowed prompt is safe.
 - Log mode exposes the match through the response header. You don't need a
   persistent audit log, classifier calls, or streamed requests in this stage.
 

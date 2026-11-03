@@ -46,7 +46,14 @@ hints, denylist blocking before the origin, and a log mode that reports matching
 rules without blocking. Run `make -C ../cloudflare-tester test_stage_3` to
 exercise all three implemented stages.
 
-Stages 4-11 still return "this stage is not implemented yet". Their lessons,
+Stage 4 (`wt4`) includes
+[normalization instructions](stage_descriptions/base-04-wt4.md), Go/Python
+solutions and hints, Unicode normalization and case folding, policy-supplied
+character mappings, and one layer of base64 inspection. Forwarded request bytes
+remain unchanged. Run `make -C ../cloudflare-tester test_stage_4` to exercise
+all four implemented stages.
+
+Stages 5-11 still return "this stage is not implemented yet". Their lessons,
 policy data, replay fixtures, and solutions have not been authored. Difficulty
 ratings remain provisional until the streaming finale is prototyped.
 

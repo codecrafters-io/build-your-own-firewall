@@ -2,9 +2,11 @@ hints:
   - title_markdown: "How do I read the policy and find a match?"
     body_markdown: |-
       Load `args.policy` with `json.load` at startup. Decode the request body
-      with `json.loads`, then iterate over the policy's denylist entries.
-      For each entry, use `any(term in message["content"] for message in messages)`.
-      Stop at the first matching rule, keeping the original body bytes to forward.
+      with `json.loads` and collect each message's text: a `str` content, the
+      `text` of each `{"type": "text"}` part in a `list`, or nothing for `None`.
+      Return `400` for anything else, including a `json.JSONDecodeError`. Then
+      iterate over the denylist entries, use `any(term in text for text in texts)`,
+      and stop at the first matching rule, keeping the original body bytes to forward.
   - title_markdown: "How do block and log mode differ?"
     body_markdown: |-
       For a block-mode match, send `403` with an `application/json` error body
