@@ -41,10 +41,10 @@ when the origin is unavailable. Run `make -C ../cloudflare-tester test_stage_2`
 to exercise both implemented stages.
 
 Stage 3 (`kg7`) includes
-[policy instructions](stage_descriptions/base-03-kg7.md), Go/Python solutions and
-hints, denylist blocking before the origin, and a log mode that reports matching
-rules without blocking. Run `make -C ../cloudflare-tester test_stage_3` to
-exercise all three implemented stages.
+[policy instructions](stage_descriptions/base-03-kg7.md), Go/Python solutions
+and hints, denylist blocking before the origin, and a log mode that reports
+matching rules without blocking. Run `make -C ../cloudflare-tester test_stage_3`
+to exercise all three implemented stages.
 
 Stage 4 (`wt4`) includes
 [normalization instructions](stage_descriptions/base-04-wt4.md), Go/Python
@@ -53,7 +53,14 @@ character mappings, and one layer of base64 inspection. Forwarded request bytes
 remain unchanged. Run `make -C ../cloudflare-tester test_stage_4` to exercise
 all four implemented stages.
 
-Stages 5-11 still return "this stage is not implemented yet". Their lessons,
+Stage 5 (`ro3`) includes
+[heuristic scoring instructions](stage_descriptions/base-05-ro3.md), Go/Python
+solutions and hints, policy-supplied substring and proximity signals, weighted
+request scores, deduplication, and threshold decisions in block and log modes.
+Run `make -C ../cloudflare-tester test_stage_5` to exercise all five implemented
+stages.
+
+Stages 6-11 still return "this stage is not implemented yet". Their lessons,
 policy data, replay fixtures, and solutions have not been authored. Difficulty
 ratings remain provisional until the streaming finale is prototyped.
 

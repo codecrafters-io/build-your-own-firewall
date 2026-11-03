@@ -1,0 +1,14 @@
+hints:
+  - title_markdown: "How do I implement the proximity signal?"
+    body_markdown: |-
+      Find every index where `text.startswith(term, index)` succeeds for each
+      term. Compare every pair in both orders. The gap runs from the end of one
+      term to the start of the other and must be nonnegative and at most
+      `max_gap`. Python string lengths count Unicode code points.
+  - title_markdown: "Where should I accumulate weights?"
+    body_markdown: |-
+      Start with a fresh score and list of IDs for each request. Loop over signals,
+      then candidates. Once a signal matches, add its weight once and break the
+      candidate loop. Evaluate every signal before comparing the total with the
+      threshold. Add the score and comma-separated IDs to both allowed and blocked
+      responses. Log mode still forwards the original bytes.

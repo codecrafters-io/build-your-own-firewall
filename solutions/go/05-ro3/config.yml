@@ -1,0 +1,14 @@
+hints:
+  - title_markdown: "How should I find nearby terms?"
+    body_markdown: |-
+      Collect every occurrence of both terms using `strings.HasPrefix` while
+      scanning the candidate. For each pair, check both orders, exclude overlaps,
+      and count the intervening Unicode characters with `utf8.RuneCountInString`.
+      Byte offsets can locate substrings, but byte lengths are not character gaps.
+  - title_markdown: "How do I avoid counting a signal twice?"
+    body_markdown: |-
+      Loop over the policy's signals first, then over all inspection candidates.
+      On the first match, add that signal's weight, append its ID, and break only
+      the inner loop. Keep evaluating other signals. Use `strconv.Itoa` for the
+      score header and `strings.Join` for the signal header. Reset the result
+      for each request and keep denylist matches ahead of the threshold decision.
