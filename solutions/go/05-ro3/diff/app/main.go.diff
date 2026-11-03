@@ -154,9 +154,7 @@
  	proxy := &httputil.ReverseProxy{
  		Rewrite: func(request *httputil.ProxyRequest) {
  			request.SetURL(target)
-@@ -129,50 +188,60 @@
- 		}
- 		body, err := io.ReadAll(r.Body)
+@@ -131,50 +190,60 @@
  		if err != nil {
  			http.Error(w, "Could not read request", http.StatusBadRequest)
  			return
@@ -180,8 +178,8 @@
  			}
  			if matchedRule != "" {
  				break
-+			}
-+		}
+ 			}
+ 		}
 +		if policy.Heuristics != nil {
 +			score, signals := scoreHeuristics(inspection, policy.Heuristics)
 +			w.Header().Set("X-Firewall-Score", strconv.Itoa(score))
@@ -190,8 +188,8 @@
 +			}
 +			if matchedRule == "" && score >= policy.Heuristics.Threshold {
 +				matchedRule = "heuristic_score"
- 			}
- 		}
++			}
++		}
  		if matchedRule != "" {
  			if policy.Mode != "log" {
  				w.Header().Set("Content-Type", "application/json")
@@ -215,3 +213,5 @@
  	})
  	if err := http.ListenAndServe(":8080", nil); err != nil {
  		fmt.Fprintln(os.Stderr, err)
+ 		os.Exit(1)
+ 	}

@@ -1,0 +1,88 @@
+name: Review all stage descriptions
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "stage_descriptions/**"
+      - ".github/workflows/review-stage-descriptions.yml"
+  pull_request:
+    paths:
+      - "stage_descriptions/**"
+      - ".github/workflows/review-stage-descriptions.yml"
+
+concurrency:
+  group: prose-review-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  review_all_stages:
+    if:
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: course
+      - uses: actions/checkout@v4
+        with:
+          repository: codecrafters-io/llm-rules-test
+          ref: 1e6c9b356605517af6b619705a7b7a5f4cde5642
+          path: tools/llm-linter
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.2
+      - name: Install prose checker
+        working-directory: tools/llm-linter
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+        run: bun install
+      - name: Review every lesson
+        working-directory: tools/llm-linter
+        env:
+          LLM_RULE_EVALUATOR_OPENAI_API_KEY:
+            ${{ secrets.LLM_RULE_EVALUATOR_OPENAI_API_KEY }}
+          COURSE_DIR: ${{ github.workspace }}/course
+        run: |
+          bun run src/index.ts \
+            --format md --out reports/prose --report reports/lint.json \
+            --model gpt-5 --file-concurrency 2 --rule-concurrency 4 \
+            "$COURSE_DIR"/stage_descriptions/*.md
+      - name: Require complete review and passing error rules
+        working-directory: tools/llm-linter
+        env:
+          COURSE_DIR: ${{ github.workspace }}/course
+        run: |
+          bun -e '
+            import { readFileSync, readdirSync } from "node:fs";
+            import { resolve } from "node:path";
+            import { loadAllRules } from "./src/utils.ts";
+            const report = JSON.parse(readFileSync("reports/lint.json", "utf8"));
+            const expected = readdirSync(`${process.env.COURSE_DIR}/stage_descriptions`).filter(name => name.endsWith(".md")).map(name => resolve(process.env.COURSE_DIR, "stage_descriptions", name)).sort();
+            const actual = report.files.map(file => resolve(file.file)).sort();
+            if (!expected.length || report.checked !== expected.length || JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("Prose review did not cover every lesson");
+            const rules = await loadAllRules("rules");
+            const errors = new Set(rules.filter(rule => rule.severity === "error").map(rule => rule.id));
+            let failures = 0;
+            for (const file of report.files) {
+              if (file.rules.length !== rules.length || new Set(file.rules.map(rule => rule.id)).size !== rules.length || file.rules.some(rule => !rules.some(expected => expected.id === rule.id))) throw new Error(`Incomplete rule coverage: ${file.file}`);
+              for (const rule of file.rules.filter(rule => !rule.pass)) {
+                console.log(`${file.file}: ${rule.id}: ${rule.rationale}`);
+                if (errors.has(rule.id)) failures++;
+              }
+            }
+            console.log(`Reviewed ${actual.length} lessons against ${rules.length} rules; ${failures} error-rule failures`);
+            if (failures) process.exit(1);
+          '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: course-prose-review
+          path: tools/llm-linter/reports/
+          if-no-files-found: error

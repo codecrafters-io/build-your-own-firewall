@@ -12,6 +12,10 @@ final rule uses bounded value matching, not full taint tracking. All LLM traffic
 must pass through the proxy, and the agent must execute only the tool calls it
 returns.
 
+The [course-wide design and compliance review](extension_designs/base-course.md)
+records the stage progression, verification scope, and deliberate skill
+deviations.
+
 ## Development
 
 This challenge uses [course-sdk](https://github.com/codecrafters-io/course-sdk).
@@ -107,5 +111,7 @@ The draft in `course-extension-ideas.yml` is for core's
 It has not been synced. Add an extension to the course definition only alongside
 its stages.
 
-Publish the tester's first release (`v1`) before running course CI that
-downloads it. A tester release has not been published yet.
+Course CI downloads the
+[latest tester release](https://github.com/codecrafters-io/cloudflare-tester/releases/latest)
+and tests each shipped language. The course-wide prose workflow checks every
+lesson and retains the review report as an Actions artifact.

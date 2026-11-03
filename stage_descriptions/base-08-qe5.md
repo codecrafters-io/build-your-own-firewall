@@ -140,15 +140,36 @@ The origin must receive the same request with these message values:
 ]
 ```
 
-The mock returns a clean completion, which reaches the client unchanged. Later,
-a scripted completion echoes the system message. That response must produce the
-HTTP `403` error shown above, with rule `canary_leak`, and release no origin
-body bytes.
+The mock returns HTTP `200`, `Content-Type: application/json`, and
+`X-Request-Id: req-policy`. Relay these headers and this response body
+unchanged:
+
+```json
+{
+  "id": "chatcmpl-policy",
+  "object": "chat.completion",
+  "created": 1700000000,
+  "model": "course-model",
+  "choices": [
+    {
+      "index": 0,
+      "message": { "role": "assistant", "content": "Policy allowed." },
+      "finish_reason": "stop"
+    }
+  ],
+  "course_marker": "keep-this"
+}
+```
+
+The displayed JSON is formatted for readability. Preserve the mock's original
+body bytes on the wire. A later scripted completion echoes the system message.
+That response must produce the HTTP `403` error shown above, with rule
+`canary_leak`, and release no origin body bytes.
 
 Other checks cover repeated values across messages and text parts, fresh maps,
 JSON escapes, preserved metadata, changed patterns and overlap order, canaries
-in nested fields and origin errors, and log-mode enforcement. All eight stages
-must continue to work. Each API call has a three-second deadline.
+in nested fields and origin errors, and log-mode enforcement. Keep behavior from
+earlier stages working. Each API call has a three-second deadline.
 
 ### Notes
 
