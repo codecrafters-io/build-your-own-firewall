@@ -1,0 +1,8 @@
+# Merge into core's data/course_extension_ideas.yml after the course record exists.
+- slug: "cloudflare-rate-limiting"
+  course_slug: "cloudflare"
+  development_status: "not_started"
+  name: "Rate limiting"
+  description_markdown: |-
+    In this challenge extension you'll add [rate limiting](https://www.rfc-editor.org/rfc/rfc6585#section-4) to your AI firewall before requests reach the model.
+    Along the way you'll learn about per-client request budgets, HTTP 429 responses, retry headers, and more.
