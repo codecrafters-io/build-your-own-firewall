@@ -115,6 +115,20 @@ and the three linked skills below.
 - Publish the tester's first release after its full regression checks. Verify
   course CI can download that release and run both shipped languages.
 
+The first complete hosted prose review evaluated all eleven lessons against
+sixteen rules. It found one ambiguity in the block/log lesson: the valid-mode
+statement appeared to exclude the empty policy used by earlier checks. The
+lesson now states that empty policies are allowed and that supplied policies
+with rules include a valid mode. The other 175 rule evaluations passed. The same
+all-lesson workflow verifies the correction without relaxing any rules.
+
+The tester's [v1 release][release] is published. Both public Linux archives were
+downloaded and checked against the published SHA-256 sums, including the binary,
+launcher and executable permissions. The full local suite and the tester's
+[hosted tests][tester-ci] pass. Course template generation, schema validation,
+naming and lint checks pass with Linux-generated diffs. Language and prose
+results for subsequent commits are visible in the course's Actions workflows.
+
 Earlier design records describe the state at each stage's completion. Their
 references to work being uncommitted or unpublished are historical statements.
 The current release and CI status is recorded by GitHub Actions and releases.
@@ -130,3 +144,7 @@ The current release and CI status is recorded by GitHub Actions and releases.
 
 Review basis: [Create a New Challenge][create], [Author a Course
 Extension][author], and [Review Course Extensions][review].
+
+[release]: https://github.com/codecrafters-io/cloudflare-tester/releases/tag/v1
+[tester-ci]:
+  https://github.com/codecrafters-io/cloudflare-tester/actions/runs/41634039540

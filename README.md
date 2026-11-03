@@ -23,6 +23,9 @@ Run `make setup` to clone the SDK, then follow its installation instructions.
 Run `course-sdk compile` with Docker running to regenerate the Go 1.25 and
 Python 3.14 starters and generated first-stage solutions.
 
+For reproducible solution diffs, generate them on Linux with GNU `diff`, as CI
+does. Native BSD `diff` on macOS can produce different hunk boundaries.
+
 After editing the course definition, run:
 
 ```sh

@@ -107,8 +107,9 @@ and the request and response preservation from earlier stages working.
 
 ### Notes
 
-- Policies are valid, with a valid mode, unique rule IDs, and nonempty terms. An
-  empty policy (`{}`) has no rules.
+- An empty policy (`{}`) is allowed and has no rules. It forwards requests that
+  can be inspected. Supplied policies with rules include `mode: "block"` or
+  `mode: "log"`, unique rule IDs, and nonempty terms.
 - This stage uses literal matching. Uppercase text, other spellings, and a term
   split across messages or parts can pass the filter. It does not establish that
   an allowed prompt is safe.
