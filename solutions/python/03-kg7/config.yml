@@ -1,0 +1,13 @@
+hints:
+  - title_markdown: "How do I read the policy and find a match?"
+    body_markdown: |-
+      Load `args.policy` with `json.load` at startup. Decode the request body
+      with `json.loads`, then iterate over the policy's denylist entries.
+      For each entry, use `any(term in message["content"] for message in messages)`.
+      Stop at the first matching rule, keeping the original body bytes to forward.
+  - title_markdown: "How do block and log mode differ?"
+    body_markdown: |-
+      For a block-mode match, send `403` with an `application/json` error body
+      and return before `urlopen`. For a log-mode match, forward as usual and
+      use `self.send_header("X-Firewall-Match", id)` before `end_headers` on
+      the origin response. Keep the matched rule local to the current request.

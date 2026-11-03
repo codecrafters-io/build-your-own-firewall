@@ -40,7 +40,13 @@ verifies request and response preservation, origin HTTP errors, and HTTP 502
 when the origin is unavailable. Run `make -C ../cloudflare-tester test_stage_2`
 to exercise both implemented stages.
 
-Stages 3-11 still return "this stage is not implemented yet". Their lessons,
+Stage 3 (`kg7`) includes
+[policy instructions](stage_descriptions/base-03-kg7.md), Go/Python solutions and
+hints, denylist blocking before the origin, and a log mode that reports matching
+rules without blocking. Run `make -C ../cloudflare-tester test_stage_3` to
+exercise all three implemented stages.
+
+Stages 4-11 still return "this stage is not implemented yet". Their lessons,
 policy data, replay fixtures, and solutions have not been authored. Difficulty
 ratings remain provisional until the streaming finale is prototyped.
 

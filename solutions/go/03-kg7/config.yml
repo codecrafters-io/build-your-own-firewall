@@ -1,0 +1,13 @@
+hints:
+  - title_markdown: "How do I inspect a request without changing it?"
+    body_markdown: |-
+      Read `r.Body` with `io.ReadAll`, then use `json.Unmarshal` to inspect
+      `messages[].content`. Iterate over policy entries first so policy order
+      decides the match. Use `strings.Contains` for literal matching. Before
+      forwarding, restore `r.Body` with `io.NopCloser(bytes.NewReader(body))`.
+  - title_markdown: "Where should the policy decision happen?"
+    body_markdown: |-
+      Read the policy file with `os.ReadFile` at startup and decode its JSON.
+      In your request handler, return the JSON `403` before calling
+      `proxy.ServeHTTP`. In log mode, set `w.Header().Set("X-Firewall-Match", id)`
+      and let the reverse proxy forward the original request.
