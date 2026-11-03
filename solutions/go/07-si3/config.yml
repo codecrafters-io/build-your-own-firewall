@@ -1,0 +1,17 @@
+hints:
+  - title_markdown: "How do I keep each heuristic score with its message?"
+    body_markdown: |-
+      Have extraction return one entry per message, containing its role and text
+      strings. Keep null-content entries too, so indices still line up with the
+      classifier results. Normalize each entry's strings and call your existing
+      score helper separately for each message. Keep the request-wide inspection
+      list for denylist matching and the existing diagnostic headers.
+  - title_markdown:
+      "Where should the new decision rules replace the old cutoffs?"
+    body_markdown: |-
+      After every classifier call succeeds, walk messages in order. Select the
+      default or tool thresholds from the structured role. Check classifier_high
+      first, then use && for both medium comparisons. Use >= for every boundary.
+      With decisions enabled, skip the old standalone cutoffs on success. On
+      fail-open, keep the request-wide heuristic fallback. An absent decisions
+      object must retain earlier behavior.

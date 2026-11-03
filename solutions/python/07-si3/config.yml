@@ -1,0 +1,15 @@
+hints:
+  - title_markdown: "How do I avoid combining clues from different messages?"
+    body_markdown: |-
+      Extract a list of (role, texts) entries instead of flattening the entire
+      conversation. Zip those entries with the classifier results kept in original
+      message order. Build inspection candidates and call score_heuristics for
+      each entry separately. Each call gets a fresh score and fired-signal list.
+      Use the flattened candidates separately for the existing diagnostic headers.
+  - title_markdown: "How do I choose the rule and preserve failure behavior?"
+    body_markdown: |-
+      Use settings["tool"] only when role == "tool", otherwise settings["default"].
+      Check the high classifier cutoff first, then require both medium conditions
+      with and. Return the first matching message's rule. Apply these decisions
+      only after all classifier calls succeed. Keep the earlier fail-open fallback,
+      fail-closed rejection, and block/log response handling.

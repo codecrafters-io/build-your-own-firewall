@@ -1,0 +1,18 @@
+hints:
+  - title_markdown: "How do I start all classifier calls together?"
+    body_markdown: |-
+      Submit one task per original message to `ThreadPoolExecutor`, then collect
+      results together. Each task sends only that message JSON to `/classify`.
+      Create the detector HTTP opener once before serving requests, so parallel
+      calls can reuse it without repeating client setup. Keep results in message
+      order for later decision rules, and use the maximum
+      for this stage. Check `type(score) is int` so `True` is not accepted as 1.
+  - title_markdown: "Why can a socket timeout still wait too long?"
+    body_markdown: |-
+      A response can keep delivering bytes before each socket timeout expires.
+      Set a monotonic deadline, then use `concurrent.futures.wait` with the time
+      remaining to bound the whole batch. On expiry, ignore incomplete results.
+      Avoid a `with ThreadPoolExecutor(...)` block here: leaving it waits for
+      workers. Call `shutdown(wait=False, cancel_futures=True)` instead, and let
+      each HTTP task keep its own short socket timeout too. Late results must
+      not affect the decision. Treat HTTP and JSON errors as unavailability.

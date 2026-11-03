@@ -1,0 +1,24 @@
+hints:
+  - title_markdown: "How can I inspect without buffering the whole response?"
+    body_markdown: |-
+      Give streaming requests their own ReverseProxy response modifier. For a
+      successful text/event-stream response, replace the origin body with an
+      io.Pipe reader. Run the event reader and canary inspection in a goroutine
+      that writes generated SSE events to the pipe writer. ReverseProxy flushes
+      event-stream responses immediately. Remove Content-Length and close the
+      origin body when inspection ends. Use the earlier modifier for JSON errors.
+  - title_markdown: "How much pending text is safe to release?"
+    body_markdown: |-
+      After JSON decoding, append choices[0].delta.content to pending text and
+      search for the canary before writing anything. Convert pending to []rune
+      and keep utf8.RuneCountInString(canary) - 1 characters. Emit the prefix before
+      that suffix. A match sends one error and discards pending text. At [DONE],
+      emit the clean tail and then the success terminator. Keep buffers local to
+      each response.
+  - title_markdown: "How do I handle network chunks and JSON escapes?"
+    body_markdown: |-
+      Use a buffered line reader for the well-formed data: lines. A line may span
+      several network reads, so don't parse individual Read results as events.
+      Decode each JSON payload before inspecting its content, ignore empty text,
+      and JSON-encode generated chunks so newlines and quotes remain valid.
+      Stop reading as soon as the canary is detected. Don't emit [DONE] on denial.

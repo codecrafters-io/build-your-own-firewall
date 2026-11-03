@@ -60,9 +60,47 @@ request scores, deduplication, and threshold decisions in block and log modes.
 Run `make -C ../cloudflare-tester test_stage_5` to exercise all five implemented
 stages.
 
-Stages 6-11 still return "this stage is not implemented yet". Their lessons,
-policy data, replay fixtures, and solutions have not been authored. Difficulty
-ratings remain provisional until the streaming finale is prototyped.
+Stage 6 (`xd5`) includes
+[classifier instructions](stage_descriptions/base-06-xd5.md), Go/Python
+solutions and hints, parallel per-message classifier calls, a 200 ms deadline,
+explicit fail-open/fail-closed behavior, and deterministic synthetic classifier
+fixtures. Run `make -C ../cloudflare-tester test_stage_6` to exercise all six
+implemented stages.
+
+Stage 7 (`si3`) includes
+[combined-decision instructions](stage_descriptions/base-07-si3.md), Go/Python
+solutions and hints, paired per-message scores, policy-supplied high and medium
+thresholds, and stricter decisions for tool output. Earlier classifier failures
+retain their fallback behavior. Run `make -C ../cloudflare-tester test_stage_7`
+to exercise all seven implemented stages.
+
+Stage 8 (`qe5`) includes [DLP instructions](stage_descriptions/base-08-qe5.md),
+Go/Python solutions and hints, request-scoped numbered redaction, and buffered
+outgoing canary detection. It checks JSON-decoded response strings and preserves
+clean response bytes. Run `make -C ../cloudflare-tester test_stage_8` to
+exercise all eight implemented stages.
+
+Stage 9 (`ou9`) includes
+[streaming instructions](stage_descriptions/base-09-ou9.md), Go/Python solutions
+and hints, a character-based holdback buffer, incremental SSE delivery, and a
+terminal canary error. Clean streams retain their full text without waiting for
+the whole origin response. Run `make -C ../cloudflare-tester test_stage_9` to
+exercise all nine implemented stages.
+
+Stage 10 (`as4`) includes
+[tool authorization instructions](stage_descriptions/base-10-as4.md), Go/Python
+solutions and hints, exact tool and parsed-host allowlists, complete argument
+validation, and atomic release of assembled streamed calls. Safe text retains
+incremental delivery. Run `make -C ../cloudflare-tester test_stage_10` to
+exercise all ten implemented stages.
+
+Stage 11 (`mu9`) includes
+[private export instructions](stage_descriptions/base-11-mu9.md), Go/Python
+solutions and hints, request-local private-field tracking by tool-call ID, and
+trusted tool-and-destination export permissions. Its synthetic streamed finale
+and 25-attack, 15-benign replay report course-suite outcomes. Run
+`make -C ../cloudflare-tester test_stage_11` to exercise all eleven stages.
+Difficulty ratings remain provisional until learner feedback is available.
 
 The draft in `course-extension-ideas.yml` is for core's
 `data/course_extension_ideas.yml`, after the `cloudflare` course record exists.

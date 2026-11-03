@@ -1,0 +1,173 @@
+@@ -168,50 +168,82 @@
+         elif isinstance(content, list):
+             for part in content:
+                 part["text"] = redact(part["text"])
+     return json.dumps(request).encode() if changed else body
+
+
+ def contains_canary(body, canary):
+     if canary.encode() in body:
+         return True
+
+     def contains(value):
+         if isinstance(value, str):
+             return canary in value
+         if isinstance(value, list):
+             return any(contains(child) for child in value)
+         if isinstance(value, dict):
+             return any(contains(child) for child in value.values())
+         return False
+
+     try:
+         return contains(json.loads(body))
+     except (ValueError, UnicodeDecodeError):
+         return False
+
+
++
++def inspect_stream(origin, emit, canary):
++    pending = ""
++    keep = len(canary) - 1
++
++    def emit_text(text):
++        if text:
++            emit({"id": "chatcmpl-firewall", "object": "chat.completion.chunk",
++                  "created": 0, "model": "course-model", "choices": [
++                      {"index": 0, "delta": {"content": text}, "finish_reason": None}]})
++
++    for line in origin:
++        if not line.startswith(b"data:"):
++            continue
++        data = line[5:].strip()
++        if data == b"[DONE]":
++            emit_text(pending)
++            emit("[DONE]")
++            return
++        chunk = json.loads(data)
++        if not chunk.get("choices"):
++            continue
++        pending += chunk["choices"][0].get("delta", {}).get("content") or ""
++        if canary in pending:
++            emit({"error": {"message": "Blocked outgoing canary",
++                            "type": "firewall_block", "rule": "canary_leak"}})
++            return
++        if len(pending) > keep:
++            emit_text(pending[:len(pending) - keep])
++            pending = pending[len(pending) - keep:]
++
++
+ def main():
+     parser = argparse.ArgumentParser()
+     parser.add_argument("--origin")
+     parser.add_argument("--detector")
+     parser.add_argument("--policy")
+     args = parser.parse_args()
+
+     with open(args.policy, encoding="utf-8") as policy_file:
+         policy = json.load(policy_file)
+
+     redaction_patterns = [re.compile(pattern) for pattern in policy.get("dlp", {}).get("patterns", [])]
+     detector_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoDetectorRedirect())
+
+     class Handler(BaseHTTPRequestHandler):
+         def do_GET(self):
+             self.send_response(200 if self.path == "/health" else 404)
+             self.end_headers()
+
+         def do_POST(self):
+             if self.path != "/v1/chat/completions":
+                 self.send_error(404)
+                 return
+             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+             messages = inspect_messages(body)
+             if messages is None:
+@@ -261,67 +293,88 @@
+                             matched_rule = decision_rule(messages, scores, policy["decisions"],
+                                                          policy.get("heuristics"), policy.get("normalization"))
+                         elif highest >= policy["classifier"]["threshold"]:
+                             matched_rule = "classifier_score"
+             if matched_rule and (policy.get("mode", "block") != "log" or detector_unavailable):
+                 data = json.dumps({"error": {
+                     "message": "Blocked by firewall policy",
+                     "type": "firewall_block",
+                     "rule": matched_rule,
+                 }}).encode()
+                 self.send_response(403)
+                 self.send_header("Content-Type", "application/json")
+                 self.send_header("Content-Length", str(len(data)))
+                 for name, value in score_headers.items():
+                     self.send_header(name, value)
+                 self.end_headers()
+                 self.wfile.write(data)
+                 return
+             headers = {
+                 name: self.headers[name]
+                 for name in ("Authorization", "Content-Type")
+                 if name in self.headers
+             }
+             if "dlp" in policy:
+                 body = redact_request(body, redaction_patterns)
++            streaming = json.loads(body).get("stream") is True
+             request = urllib.request.Request(
+                 args.origin.rstrip("/") + self.path,
+                 data=body,
+                 headers=headers,
+                 method="POST",
+             )
+             try:
+-                response = urllib.request.urlopen(request, timeout=2)
++                response = urllib.request.urlopen(request, timeout=5 if streaming else 2)
+             except urllib.error.HTTPError as error:
+                 response = error
+             except urllib.error.URLError:
+                 self.send_response(502)
+                 for name, value in score_headers.items():
+                     self.send_header(name, value)
+                 self.end_headers()
+                 return
+             with response:
++                if (streaming and "dlp" in policy
++                        and response.status == 200
++                        and response.headers.get("Content-Type", "").startswith("text/event-stream")):
++                    self.send_response(200)
++                    for name in ("Content-Type", "X-Request-Id"):
++                        if name in response.headers:
++                            self.send_header(name, response.headers[name])
++                    for name, value in score_headers.items():
++                        self.send_header(name, value)
++                    if matched_rule:
++                        self.send_header("X-Firewall-Match", matched_rule)
++                    self.end_headers()
++
++                    def emit(value):
++                        data = value if value == "[DONE]" else json.dumps(value)
++                        self.wfile.write(("data: " + data + "\n\n").encode())
++                        self.wfile.flush()
++
++                    inspect_stream(response, emit, policy["dlp"]["canary"])
++                    return
+                 data = response.read()
+                 if "dlp" in policy and contains_canary(data, policy["dlp"]["canary"]):
+                     data = json.dumps({"error": {"message": "Blocked outgoing canary",
+                         "type": "firewall_block", "rule": "canary_leak"}}).encode()
+                     self.send_response(403)
+                     self.send_header("Content-Type", "application/json")
+                     self.send_header("Content-Length", str(len(data)))
+                     for name, value in score_headers.items():
+                         self.send_header(name, value)
+                     self.end_headers()
+                     self.wfile.write(data)
+                     return
+                 self.send_response(response.status)
+                 for name in ("Content-Type", "X-Request-Id"):
+                     if name in response.headers:
+                         self.send_header(name, response.headers[name])
+                 for name, value in score_headers.items():
+                     self.send_header(name, value)
+                 if matched_rule:
+                     self.send_header("X-Firewall-Match", matched_rule)
+                 self.send_header("Content-Length", str(len(data)))
+                 self.end_headers()
+                 self.wfile.write(data)
+
+     ThreadingHTTPServer(("127.0.0.1", 8080), Handler).serve_forever()

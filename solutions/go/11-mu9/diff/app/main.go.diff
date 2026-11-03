@@ -1,0 +1,473 @@
+@@ -416,95 +416,262 @@
+ 	return ""
+ }
+
+ func responseToolRule(body []byte, tools map[string]toolPolicy) string {
+ 	if tools == nil {
+ 		return ""
+ 	}
+ 	var response struct {
+ 		Choices []struct {
+ 			Message struct {
+ 				ToolCalls []toolCall `json:"tool_calls"`
+ 			} `json:"message"`
+ 		} `json:"choices"`
+ 	}
+ 	if json.Unmarshal(body, &response) != nil {
+ 		return "tool_arguments_invalid"
+ 	}
+ 	for _, choice := range response.Choices {
+ 		if rule := toolRule(choice.Message.ToolCalls, tools); rule != "" {
+ 			return rule
+ 		}
+ 	}
+ 	return ""
+ }
+
++type exportPolicy struct {
++	PrivateTools []string `json:"private_tools"`
++	Allowed      []struct {
++		Tool                string `json:"tool"`
++		DestinationArgument string `json:"destination_argument"`
++		EmailDomain         string `json:"email_domain"`
++	} `json:"allowed"`
++}
++type privateValuesKey struct{}
++
++// History is supplied in full by the agent, with unique call IDs and linked results.
++func privateValues(body []byte, settings *exportPolicy) []string {
++	if settings == nil {
++		return nil
++	}
++	var request struct {
++		Messages []struct {
++			Role       string          `json:"role"`
++			ToolCalls  []toolCall      `json:"tool_calls"`
++			ToolCallID string          `json:"tool_call_id"`
++			Content    json.RawMessage `json:"content"`
++		} `json:"messages"`
++	}
++	// Assistant content may be null, but private tool results are JSON strings.
++	if json.Unmarshal(body, &request) != nil {
++		return nil
++	}
++	names := map[string]string{}
++	for _, message := range request.Messages {
++		if message.Role == "assistant" {
++			for _, call := range message.ToolCalls {
++				names[call.ID] = call.Function.Name
++			}
++		}
++	}
++	var values []string
++	for _, message := range request.Messages {
++		if message.Role != "tool" {
++			continue
++		}
++		private := false
++		for _, name := range settings.PrivateTools {
++			if names[message.ToolCallID] == name {
++				private = true
++				break
++			}
++		}
++		if !private {
++			continue
++		}
++		var fields map[string]string
++		var content string
++		if json.Unmarshal(message.Content, &content) != nil || json.Unmarshal([]byte(content), &fields) != nil {
++			continue
++		}
++		for _, value := range fields {
++			values = append(values, value)
++		}
++	}
++	return values
++}
++
++func argumentStrings(value any) []string {
++	var result []string
++	switch value := value.(type) {
++	case string:
++		result = append(result, value)
++		if target, err := url.Parse(value); err == nil && (target.Scheme == "http" || target.Scheme == "https") && target.Host != "" {
++			for _, values := range target.Query() {
++				result = append(result, values...)
++			}
++		}
++	case []any:
++		for _, item := range value {
++			result = append(result, argumentStrings(item)...)
++		}
++	case map[string]any:
++		for _, item := range value {
++			result = append(result, argumentStrings(item)...)
++		}
++	}
++	return result
++}
++
++func exportRule(calls []toolCall, settings *exportPolicy, values []string, normalization *normalizationPolicy) string {
++	if settings == nil || len(values) == 0 {
++		return ""
++	}
++	// The export rule always decodes one standard-base64 layer, even without normalization settings.
++	if normalization == nil {
++		normalization = &normalizationPolicy{}
++	}
++	protected := []string{}
++	for _, value := range values {
++		protected = append(protected, inspectionTexts(value, normalization)[0])
++	}
++	for _, call := range calls {
++		var arguments map[string]any
++		if json.Unmarshal([]byte(call.Function.Arguments), &arguments) != nil || arguments == nil {
++			return "tool_arguments_invalid"
++		}
++		matched := false
++		for _, text := range argumentStrings(arguments) {
++			for _, candidate := range inspectionTexts(text, normalization) {
++				for _, value := range protected {
++					if value != "" && strings.Contains(candidate, value) {
++						matched = true
++					}
++				}
++			}
++		}
++		if !matched {
++			continue
++		}
++		approved := false
++		for _, export := range settings.Allowed {
++			if export.Tool != call.Function.Name {
++				continue
++			}
++			recipient, ok := arguments[export.DestinationArgument].(string)
++			if !ok || strings.Count(recipient, "@") != 1 {
++				continue
++			}
++			invalid := false
++			for _, character := range recipient {
++				if character <= 32 || character >= 127 {
++					invalid = true
++				}
++			}
++			parts := strings.SplitN(recipient, "@", 2)
++			if !invalid && parts[0] != "" && strings.EqualFold(parts[1], export.EmailDomain) {
++				approved = true
++				break
++			}
++		}
++		if !approved {
++			return "private_export"
++		}
++	}
++	return ""
++}
++
++func responseExportRule(body []byte, settings *exportPolicy, values []string, normalization *normalizationPolicy) string {
++	if settings == nil || len(values) == 0 {
++		return ""
++	}
++	var response struct {
++		Choices []struct {
++			Message struct {
++				ToolCalls []toolCall `json:"tool_calls"`
++			} `json:"message"`
++		} `json:"choices"`
++	}
++	if json.Unmarshal(body, &response) != nil {
++		return "tool_arguments_invalid"
++	}
++	for _, choice := range response.Choices {
++		if rule := exportRule(choice.Message.ToolCalls, settings, values, normalization); rule != "" {
++			return rule
++		}
++	}
++	return ""
++}
++
+ // Stream only decoded content, retaining enough characters to recognize a split marker.
+-func inspectStream(origin io.Reader, output io.Writer, canary string, tools map[string]toolPolicy) error {
++func inspectStream(origin io.Reader, output io.Writer, canary string, tools map[string]toolPolicy, exports *exportPolicy, values []string, normalization *normalizationPolicy) error {
+ 	calls := map[int]*toolCall{}
+ 	pending := ""
+ 	keep := max(0, utf8.RuneCountInString(canary)-1)
+ 	emit := func(text string) error {
+ 		if text == "" {
+ 			return nil
+ 		}
+ 		chunk := map[string]any{"id": "chatcmpl-firewall", "object": "chat.completion.chunk", "created": 0, "model": "course-model",
+ 			"choices": []any{map[string]any{"index": 0, "delta": map[string]string{"content": text}, "finish_reason": nil}}}
+ 		data, _ := json.Marshal(chunk)
+ 		_, err := fmt.Fprintf(output, "data: %s\n\n", data)
+ 		return err
+ 	}
+
+ 	block := func(rule string) error {
+ 		body, _ := json.Marshal(map[string]any{"error": map[string]string{"message": "Blocked outgoing tool call", "type": "firewall_block", "rule": rule}})
+ 		_, err := fmt.Fprintf(output, "data: %s\n\n", body)
+ 		return err
+ 	}
+ 	scanner := bufio.NewScanner(origin)
+ 	for scanner.Scan() {
+ 		line := scanner.Text()
+ 		if !strings.HasPrefix(line, "data:") {
+ 			continue
+ 		}
+ 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+ 		if data == "[DONE]" {
+ 			var indices []int
+ 			for index := range calls {
+ 				indices = append(indices, index)
+ 			}
+ 			sort.Ints(indices)
+ 			batch := []toolCall{}
+ 			for _, index := range indices {
+ 				batch = append(batch, *calls[index])
+ 			}
+ 			body, _ := json.Marshal(batch)
+ 			if len(batch) > 0 && canary != "" && containsCanary(body, canary) {
+ 				return block("canary_leak")
+ 			}
+ 			if rule := toolRule(batch, tools); rule != "" {
+ 				return block(rule)
+ 			}
++			if rule := exportRule(batch, exports, values, normalization); rule != "" {
++				return block(rule)
++			}
+ 			if err := emit(pending); err != nil {
+ 				return err
+ 			}
+ 			if len(batch) > 0 {
+ 				chunk := map[string]any{"id": "chatcmpl-firewall", "object": "chat.completion.chunk", "created": 0, "model": "course-model", "choices": []any{map[string]any{"index": 0, "delta": map[string]any{"tool_calls": batch}, "finish_reason": "tool_calls"}}}
+ 				data, _ := json.Marshal(chunk)
+ 				if _, err := fmt.Fprintf(output, "data: %s\n\n", data); err != nil {
+ 					return err
+ 				}
+ 			}
+ 			_, err := io.WriteString(output, "data: [DONE]\n\n")
+ 			return err
+ 		}
+ 		var chunk struct {
+ 			Choices []struct {
+ 				Delta struct {
+ 					Content   string     `json:"content"`
+ 					ToolCalls []toolCall `json:"tool_calls"`
+ 				} `json:"delta"`
+ 			} `json:"choices"`
+ 		}
+ 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+ 			return err
+ 		}
+ 		if len(chunk.Choices) == 0 {
+@@ -523,154 +690,160 @@
+ 			call.Function.Arguments += fragment.Function.Arguments
+ 		}
+ 		pending += chunk.Choices[0].Delta.Content
+ 		if canary != "" && strings.Contains(pending, canary) {
+ 			_, err := io.WriteString(output, `data: {"error":{"message":"Blocked outgoing canary","type":"firewall_block","rule":"canary_leak"}}`+"\n\n")
+ 			return err
+ 		}
+ 		characters := []rune(pending)
+ 		if len(characters) > keep {
+ 			if err := emit(string(characters[:len(characters)-keep])); err != nil {
+ 				return err
+ 			}
+ 			pending = string(characters[len(characters)-keep:])
+ 		}
+ 	}
+ 	return scanner.Err()
+ }
+
+ func main() {
+ 	origin := flag.String("origin", "", "Origin chat completions API URL")
+ 	detector := flag.String("detector", "", "Classifier service URL")
+ 	policyPath := flag.String("policy", "", "Policy JSON file path")
+ 	flag.Parse()
+
+ 	var policy struct {
++		Exports       *exportPolicy         `json:"exports"`
+ 		Tools         map[string]toolPolicy `json:"tools"`
+ 		DLP           *dlpPolicy            `json:"dlp"`
+ 		Decisions     *decisionPolicy       `json:"decisions"`
+ 		Classifier    *classifierPolicy     `json:"classifier"`
+ 		Heuristics    *heuristicPolicy      `json:"heuristics"`
+ 		Normalization *normalizationPolicy  `json:"normalization"`
+ 		Mode          string                `json:"mode"`
+ 		Denylist      []struct {
+ 			ID   string `json:"id"`
+ 			Term string `json:"term"`
+ 		} `json:"denylist"`
+ 	}
+ 	data, err := os.ReadFile(*policyPath)
+ 	if err != nil {
+ 		fmt.Fprintln(os.Stderr, err)
+ 		os.Exit(1)
+ 	}
+ 	if err := json.Unmarshal(data, &policy); err != nil {
+ 		fmt.Fprintln(os.Stderr, err)
+ 		os.Exit(1)
+ 	}
+
+ 	var redactionPatterns []*regexp.Regexp
+ 	if policy.DLP != nil {
+ 		for _, pattern := range policy.DLP.Patterns {
+ 			redactionPatterns = append(redactionPatterns, regexp.MustCompile(pattern))
+ 		}
+ 	}
+
+ 	target, err := url.Parse(*origin)
+ 	if err != nil {
+ 		fmt.Fprintln(os.Stderr, err)
+ 		os.Exit(1)
+ 	}
+ 	proxy := &httputil.ReverseProxy{
+ 		Rewrite: func(request *httputil.ProxyRequest) {
+ 			request.SetURL(target)
+ 		},
+ 	}
+-	if policy.DLP != nil || policy.Tools != nil {
++	if policy.DLP != nil || policy.Tools != nil || policy.Exports != nil {
+ 		proxy.ModifyResponse = func(response *http.Response) error {
+ 			body, err := io.ReadAll(response.Body)
+ 			response.Body.Close()
+ 			if err != nil {
+ 				return err
+ 			}
+ 			rule := ""
+ 			if policy.DLP != nil && containsCanary(body, policy.DLP.Canary) {
+ 				rule = "canary_leak"
+ 			}
+ 			if rule == "" && response.StatusCode == http.StatusOK {
+ 				rule = responseToolRule(body, policy.Tools)
++				if rule == "" {
++					values, _ := response.Request.Context().Value(privateValuesKey{}).([]string)
++					rule = responseExportRule(body, policy.Exports, values, policy.Normalization)
++				}
+ 			}
+ 			if rule != "" {
+ 				body, _ = json.Marshal(map[string]any{"error": map[string]string{
+ 					"message": "Blocked outgoing response", "type": "firewall_block", "rule": rule,
+ 				}})
+ 				response.StatusCode = http.StatusForbidden
+ 				response.Header = http.Header{"Content-Type": []string{"application/json"}}
+ 			}
+ 			response.Body = io.NopCloser(bytes.NewReader(body))
+ 			response.ContentLength = int64(len(body))
+ 			response.Header.Set("Content-Length", strconv.Itoa(len(body)))
+ 			return nil
+ 		}
+ 	}
+ 	streamProxy := *proxy
+-	if policy.DLP != nil || policy.Tools != nil {
++	if policy.DLP != nil || policy.Tools != nil || policy.Exports != nil {
+ 		streamProxy.ModifyResponse = func(response *http.Response) error {
+ 			if response.StatusCode != http.StatusOK || !strings.HasPrefix(response.Header.Get("Content-Type"), "text/event-stream") {
+ 				return proxy.ModifyResponse(response)
+ 			}
+ 			originBody := response.Body
+ 			reader, writer := io.Pipe()
+ 			response.Body = reader
+ 			response.ContentLength = -1
+ 			response.Header.Del("Content-Length")
+ 			go func() {
+ 				defer originBody.Close()
+ 				canary := ""
+ 				if policy.DLP != nil {
+ 					canary = policy.DLP.Canary
+ 				}
+-				writer.CloseWithError(inspectStream(originBody, writer, canary, policy.Tools))
++				writer.CloseWithError(inspectStream(originBody, writer, canary, policy.Tools, policy.Exports, response.Request.Context().Value(privateValuesKey{}).([]string), policy.Normalization))
+ 			}()
+ 			return nil
+ 		}
+ 	}
+
+ 	http.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+ 		if r.Method != http.MethodPost {
+ 			w.WriteHeader(http.StatusMethodNotAllowed)
+ 			return
+ 		}
+ 		body, err := io.ReadAll(r.Body)
+ 		if err != nil {
+ 			http.Error(w, "Could not read request", http.StatusBadRequest)
+ 			return
+ 		}
+ 		messages, ok := inspectMessages(body)
+ 		if !ok {
+ 			http.Error(w, "Could not inspect request", http.StatusBadRequest)
+ 			return
+ 		}
++		r = r.WithContext(context.WithValue(r.Context(), privateValuesKey{}, privateValues(body, policy.Exports)))
+ 		var inspection []string
+ 		for _, message := range messages {
+ 			for _, text := range message.Texts {
+ 				inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
+ 			}
+ 		}
+ 		matchedRule := ""
+ 		for _, rule := range policy.Denylist {
+ 			for _, text := range inspection {
+ 				if strings.Contains(text, rule.Term) {
+ 					matchedRule = rule.ID
+ 					break
+ 				}
+ 			}
+ 			if matchedRule != "" {
+ 				break
+ 			}
+ 		}
+ 		heuristicScore := 0
+ 		if policy.Heuristics != nil {
+ 			score, signals := scoreHeuristics(inspection, policy.Heuristics)
+ 			heuristicScore = score
+ 			w.Header().Set("X-Firewall-Score", strconv.Itoa(score))
+ 			if len(signals) > 0 {
+ 				w.Header().Set("X-Firewall-Signals", strings.Join(signals, ","))
+@@ -706,43 +879,43 @@
+ 				} else if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
+ 					matchedRule = "heuristic_score"
+ 				}
+ 			}
+ 		}
+ 		if matchedRule != "" {
+ 			if policy.Mode != "log" || detectorUnavailable {
+ 				w.Header().Set("Content-Type", "application/json")
+ 				w.WriteHeader(http.StatusForbidden)
+ 				json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{
+ 					"message": "Blocked by firewall policy", "type": "firewall_block", "rule": matchedRule,
+ 				}})
+ 				return
+ 			}
+ 			w.Header().Set("X-Firewall-Match", matchedRule)
+ 		}
+ 		if policy.DLP != nil {
+ 			body = redactRequest(body, redactionPatterns)
+ 		}
+ 		r.ContentLength = int64(len(body))
+ 		r.Body = io.NopCloser(bytes.NewReader(body))
+ 		var request struct {
+ 			Stream bool `json:"stream"`
+ 		}
+ 		json.Unmarshal(body, &request)
+-		if request.Stream && (policy.DLP != nil || policy.Tools != nil) {
++		if request.Stream && (policy.DLP != nil || policy.Tools != nil || policy.Exports != nil) {
+ 			streamProxy.ServeHTTP(w, r)
+ 			return
+ 		}
+ 		proxy.ServeHTTP(w, r)
+ 	})
+ 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+ 		if r.Method != http.MethodGet {
+ 			w.WriteHeader(http.StatusMethodNotAllowed)
+ 			return
+ 		}
+ 		w.WriteHeader(http.StatusOK)
+ 	})
+ 	if err := http.ListenAndServe(":8080", nil); err != nil {
+ 		fmt.Fprintln(os.Stderr, err)
+ 		os.Exit(1)
+ 	}
+ }

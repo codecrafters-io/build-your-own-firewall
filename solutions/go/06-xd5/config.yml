@@ -1,0 +1,16 @@
+hints:
+  - title_markdown: "How can I keep classifier calls independent?"
+    body_markdown: |-
+      Decode `messages` into `[]json.RawMessage` after validating the request with
+      your existing extraction helper. Send each raw object to `/classify` in a
+      goroutine. Give each goroutine a distinct result index, then use a
+      `sync.WaitGroup` to wait for them together. A shared `http.Client` is safe
+      for concurrent use. Do not copy the origin's Authorization header.
+  - title_markdown: "How do I enforce the deadline and validate scores?"
+    body_markdown: |-
+      Set `http.Client.Timeout` to `200*time.Millisecond`. It includes reading
+      the response body. Use `CheckRedirect` to return `http.ErrUseLastResponse`.
+      Read the full body and use `json.Unmarshal` into a struct with `Score *int`.
+      The pointer distinguishes a missing score from zero. Reject non-200
+      responses, decoding errors, missing scores, and scores outside 0..100.
+      If any call fails, discard all classifier results and apply failure_mode.

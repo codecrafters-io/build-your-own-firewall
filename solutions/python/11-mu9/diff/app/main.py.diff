@@ -1,0 +1,283 @@
+@@ -225,68 +225,148 @@
+             if (target.scheme not in ("http", "https") or not target.hostname
+                     or target.username is not None or target.netloc.endswith(":")
+                     or (port is not None and not 1 <= port <= 65535)):
+                 return "tool_destination_not_allowed"
+         except ValueError:
+             return "tool_destination_not_allowed"
+         if target.hostname.lower() not in [host.lower() for host in settings["allowed_hosts"]]:
+             return "tool_destination_not_allowed"
+     return ""
+
+
+ def response_tool_rule(body, tools):
+     if tools is None:
+         return ""
+     try:
+         response = json.loads(body)
+         for choice in response.get("choices", []):
+             rule = tool_rule(choice.get("message", {}).get("tool_calls") or [], tools)
+             if rule:
+                 return rule
+     except (ValueError, TypeError, AttributeError):
+         return "tool_arguments_invalid"
+     return ""
+
+
+-def inspect_stream(origin, emit, canary, tools):
++
++def private_values(body, settings):
++    if settings is None:
++        return []
++    messages = json.loads(body)["messages"]
++    names = {call["id"]: call["function"]["name"]
++             for message in messages if message.get("role") == "assistant"
++             for call in message.get("tool_calls") or []}
++    values = []
++    for message in messages:
++        if (message.get("role") == "tool"
++                and names.get(message.get("tool_call_id")) in settings["private_tools"]):
++            values.extend(json.loads(message["content"]).values())
++    return values
++
++
++def argument_strings(value):
++    if isinstance(value, str):
++        yield value
++        try:
++            target = urllib.parse.urlsplit(value)
++            if target.scheme in ("http", "https") and target.netloc:
++                for values in urllib.parse.parse_qs(target.query, keep_blank_values=True).values():
++                    yield from values
++        except ValueError:
++            pass
++    elif isinstance(value, list):
++        for item in value:
++            yield from argument_strings(item)
++    elif isinstance(value, dict):
++        for item in value.values():
++            yield from argument_strings(item)
++
++
++def export_rule(calls, settings, values, normalization):
++    if settings is None or not values:
++        return ""
++    if normalization is None:
++        normalization = {"zero_width": [], "homoglyphs": {}}
++    protected = [inspection_texts(value, normalization)[0] for value in values]
++    for call in calls:
++        try:
++            arguments = json.loads(call["function"]["arguments"], parse_constant=reject_json_constant)
++        except (ValueError, TypeError):
++            return "tool_arguments_invalid"
++        if not isinstance(arguments, dict):
++            return "tool_arguments_invalid"
++        matched = any(value in candidate for text in argument_strings(arguments)
++                      for candidate in inspection_texts(text, normalization)
++                      for value in protected if value)
++        if not matched:
++            continue
++        approved = False
++        for export in settings["allowed"]:
++            if export["tool"] != call["function"]["name"]:
++                continue
++            recipient = arguments.get(export["destination_argument"])
++            if (isinstance(recipient, str) and recipient.count("@") == 1
++                    and all(32 < ord(character) < 127 for character in recipient)):
++                local, domain = recipient.split("@")
++                if local and domain.lower() == export["email_domain"].lower():
++                    approved = True
++                    break
++        if not approved:
++            return "private_export"
++    return ""
++
++
++def response_export_rule(body, settings, values, normalization):
++    if settings is None or not values:
++        return ""
++    for choice in json.loads(body).get("choices", []):
++        rule = export_rule(choice.get("message", {}).get("tool_calls") or [], settings, values, normalization)
++        if rule:
++            return rule
++    return ""
++
++
++def inspect_stream(origin, emit, canary, tools, exports, values, normalization):
+     calls = {}
+     pending = ""
+     keep = max(0, len(canary) - 1)
+
+     def emit_text(text):
+         if text:
+             emit({"id": "chatcmpl-firewall", "object": "chat.completion.chunk",
+                   "created": 0, "model": "course-model", "choices": [
+                       {"index": 0, "delta": {"content": text}, "finish_reason": None}]})
+
+     for line in origin:
+         if not line.startswith(b"data:"):
+             continue
+         data = line[5:].strip()
+         if data == b"[DONE]":
+             batch = [calls[index] for index in sorted(calls)]
+             rule = "canary_leak" if batch and canary and contains_canary(json.dumps(batch).encode(), canary) else tool_rule(batch, tools)
++            if not rule:
++                rule = export_rule(batch, exports, values, normalization)
+             if rule:
+                 emit({"error": {"message": "Blocked outgoing tool call", "type": "firewall_block", "rule": rule}})
+                 return
+             emit_text(pending)
+             if batch:
+                 emit({"id": "chatcmpl-firewall", "object": "chat.completion.chunk",
+                       "created": 0, "model": "course-model", "choices": [
+                           {"index": 0, "delta": {"tool_calls": batch}, "finish_reason": "tool_calls"}]})
+             emit("[DONE]")
+             return
+         chunk = json.loads(data)
+         if not chunk.get("choices"):
+             continue
+         delta = chunk["choices"][0].get("delta", {})
+         for fragment in delta.get("tool_calls") or []:
+             index = fragment["index"]
+             if index not in calls:
+                 calls[index] = {"index": index, "id": "", "type": "", "function": {"name": "", "arguments": ""}}
+             call = calls[index]
+             call["id"] += fragment.get("id", "")
+             call["type"] += fragment.get("type", "")
+             call["function"]["name"] += fragment.get("function", {}).get("name", "")
+             call["function"]["arguments"] += fragment.get("function", {}).get("arguments", "")
+         pending += delta.get("content") or ""
+         if canary and canary in pending:
+@@ -303,50 +383,51 @@
+     parser.add_argument("--origin")
+     parser.add_argument("--detector")
+     parser.add_argument("--policy")
+     args = parser.parse_args()
+
+     with open(args.policy, encoding="utf-8") as policy_file:
+         policy = json.load(policy_file)
+
+     redaction_patterns = [re.compile(pattern) for pattern in policy.get("dlp", {}).get("patterns", [])]
+     detector_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoDetectorRedirect())
+
+     class Handler(BaseHTTPRequestHandler):
+         def do_GET(self):
+             self.send_response(200 if self.path == "/health" else 404)
+             self.end_headers()
+
+         def do_POST(self):
+             if self.path != "/v1/chat/completions":
+                 self.send_error(404)
+                 return
+             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+             messages = inspect_messages(body)
+             if messages is None:
+                 self.send_error(400, "Could not inspect request")
+                 return
++            protected = private_values(body, policy.get("exports"))
+             inspection = [
+                 candidate
+                 for _, texts in messages
+                 for text in texts
+                 for candidate in inspection_texts(text, policy.get("normalization"))
+             ]
+             matched_rule = next(
+                 (
+                     rule["id"]
+                     for rule in policy.get("denylist", [])
+                     if any(rule["term"] in text for text in inspection)
+                 ),
+                 "",
+             )
+             score_headers = {}
+             heuristic_score = 0
+             if "heuristics" in policy:
+                 score, signals = score_heuristics(inspection, policy["heuristics"])
+                 heuristic_score = score
+                 score_headers["X-Firewall-Score"] = str(score)
+                 if signals:
+                     score_headers["X-Firewall-Signals"] = ",".join(signals)
+                 if not matched_rule and "decisions" not in policy and score >= policy["heuristics"]["threshold"]:
+                     matched_rule = "heuristic_score"
+             detector_unavailable = False
+@@ -387,76 +468,78 @@
+             headers = {
+                 name: self.headers[name]
+                 for name in ("Authorization", "Content-Type")
+                 if name in self.headers
+             }
+             if "dlp" in policy:
+                 body = redact_request(body, redaction_patterns)
+             streaming = json.loads(body).get("stream") is True
+             request = urllib.request.Request(
+                 args.origin.rstrip("/") + self.path,
+                 data=body,
+                 headers=headers,
+                 method="POST",
+             )
+             try:
+                 response = urllib.request.urlopen(request, timeout=5 if streaming else 2)
+             except urllib.error.HTTPError as error:
+                 response = error
+             except urllib.error.URLError:
+                 self.send_response(502)
+                 for name, value in score_headers.items():
+                     self.send_header(name, value)
+                 self.end_headers()
+                 return
+             with response:
+-                if (streaming and ("dlp" in policy or "tools" in policy)
++                if (streaming and ("dlp" in policy or "tools" in policy or "exports" in policy)
+                         and response.status == 200
+                         and response.headers.get("Content-Type", "").startswith("text/event-stream")):
+                     self.send_response(200)
+                     for name in ("Content-Type", "X-Request-Id"):
+                         if name in response.headers:
+                             self.send_header(name, response.headers[name])
+                     for name, value in score_headers.items():
+                         self.send_header(name, value)
+                     if matched_rule:
+                         self.send_header("X-Firewall-Match", matched_rule)
+                     self.end_headers()
+
+                     def emit(value):
+                         data = value if value == "[DONE]" else json.dumps(value)
+                         self.wfile.write(("data: " + data + "\n\n").encode())
+                         self.wfile.flush()
+
+-                    inspect_stream(response, emit, policy.get("dlp", {}).get("canary", ""), policy.get("tools"))
++                    inspect_stream(response, emit, policy.get("dlp", {}).get("canary", ""), policy.get("tools"), policy.get("exports"), protected, policy.get("normalization"))
+                     return
+                 data = response.read()
+                 rule = ""
+                 if "dlp" in policy and contains_canary(data, policy["dlp"]["canary"]):
+                     rule = "canary_leak"
+                 if not rule and response.status == 200:
+                     rule = response_tool_rule(data, policy.get("tools"))
++                    if not rule:
++                        rule = response_export_rule(data, policy.get("exports"), protected, policy.get("normalization"))
+                 if rule:
+                     data = json.dumps({"error": {"message": "Blocked outgoing response",
+                         "type": "firewall_block", "rule": rule}}).encode()
+                     self.send_response(403)
+                     self.send_header("Content-Type", "application/json")
+                     self.send_header("Content-Length", str(len(data)))
+                     for name, value in score_headers.items():
+                         self.send_header(name, value)
+                     self.end_headers()
+                     self.wfile.write(data)
+                     return
+                 self.send_response(response.status)
+                 for name in ("Content-Type", "X-Request-Id"):
+                     if name in response.headers:
+                         self.send_header(name, response.headers[name])
+                 for name, value in score_headers.items():
+                     self.send_header(name, value)
+                 if matched_rule:
+                     self.send_header("X-Firewall-Match", matched_rule)
+                 self.send_header("Content-Length", str(len(data)))
+                 self.end_headers()
+                 self.wfile.write(data)
+
+     ThreadingHTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
+

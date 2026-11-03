@@ -1,0 +1,22 @@
+hints:
+  - title_markdown: "How do I number and reuse placeholders?"
+    body_markdown: |-
+      Make a fresh dictionary for each request, outside the loop over messages.
+      Search every compiled pattern in the remaining text and keep the match with
+      the earliest start. Keep the earlier pattern on ties. Use match.group() as
+      the dictionary key and allocate len(placeholders) + 1 only for a new value.
+      Append unchanged text, then the placeholder, and continue after match.end().
+  - title_markdown: "What must stay unchanged during redaction?"
+    body_markdown: |-
+      Run the earlier inspection and classification on the original body first.
+      Parse a separate request object for redaction and update only content strings
+      and text parts. Keep a changed flag. Return the original body if no match was
+      replaced, otherwise serialize the edited object. Keep all unrelated fields.
+  - title_markdown:
+      "How do I prevent a response from leaking before I block it?"
+    body_markdown: |-
+      Read the whole origin body before calling send_response or end_headers.
+      Check the raw bytes and recursively inspect decoded JSON string values, so
+      Unicode escapes cannot hide the canary. On a match, send a new 403 JSON error
+      with rule canary_leak and discard origin bytes and headers. Apply this in
+      log mode too. Otherwise relay the original status, bytes, and headers.

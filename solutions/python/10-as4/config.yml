@@ -1,0 +1,23 @@
+hints:
+  - title_markdown: "How do I validate function arguments?"
+    body_markdown: |-
+      The outer response contains function.arguments as a string. Call json.loads
+      on that complete string and require a dict. Reject trailing data, arrays,
+      null, and non-JSON constants. Look up the exact function name in the policy
+      before inspecting its configured URL field. Keep the original response bytes
+      and argument string when allowing the call.
+  - title_markdown: "Which URL component should match the allowlist?"
+    body_markdown: |-
+      Use urllib.parse.urlsplit and its hostname attribute. Require HTTP(S), a
+      hostname and no username, and read port to trigger invalid-port validation.
+      Reject raw whitespace, control characters and backslashes before parsing.
+      Compare lowercase hostname with lowercase policy entries using exact equality.
+      A host mentioned in the path, username, or a larger hostname is not a match.
+  - title_markdown: "How do I join and release streamed tool calls?"
+    body_markdown: |-
+      Use a fresh dict keyed by each tool_calls entry's index, appending fragment
+      strings to that entry's fields. Keep all calls buffered until [DONE], then
+      validate their complete arguments in index order before emitting any call.
+      A denied later call must not leave an earlier allowed call exposed. Preserve
+      IDs, names and argument strings in successful tool deltas. Keep text streaming
+      through the existing canary buffer, and close after one error on denial.

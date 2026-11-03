@@ -1,0 +1,22 @@
+hints:
+  - title_markdown: "How do I select matches and reuse placeholders?"
+    body_markdown: |-
+      Compile the supplied patterns with regexp. For each remaining text suffix,
+      call FindStringIndex for every pattern and keep the smallest start index.
+      Keep the first pattern on ties. Map the entire matched string to a numbered
+      placeholder. Share that map across messages and parts, but create it anew
+      for each request. Continue after the consumed match without rescanning output.
+  - title_markdown: "How do I preserve unrelated request values?"
+    body_markdown: |-
+      Inspect and classify the original body first. For rewriting, use maps of
+      json.RawMessage so unknown fields and large numbers survive serialization.
+      Update only content strings and text parts. If nothing changes, use the
+      original bytes. After changing r.Body, also update r.ContentLength.
+  - title_markdown: "Where should I inspect the outgoing response?"
+    body_markdown: |-
+      ReverseProxy.ModifyResponse runs before origin headers reach the client.
+      Read and close the body there. Search raw bytes and decoded JSON string values
+      recursively. If the canary appears, replace the status, headers, and body with
+      a fresh 403 canary_leak error. Otherwise restore the original bytes using
+      io.NopCloser and a reader. Update the response length and keep this check active
+      in log mode. Returning an error would invoke the proxy's gateway-error path.
