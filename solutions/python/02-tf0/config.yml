@@ -1,0 +1,16 @@
+hints:
+  - title_markdown: "How do I forward the JSON body?"
+    body_markdown: |-
+      In `do_POST`, read the number of bytes from `Content-Length` using
+      `self.rfile.read`. Use those bytes as the `data` in a
+      [`urllib.request.Request`](https://docs.python.org/3/library/urllib.request.html#urllib.request.Request)
+      to the origin's `/v1/chat/completions` endpoint. Copy `Authorization` and
+      `Content-Type` into the outgoing headers.
+  - title_markdown: "How do I relay errors and responses?"
+    body_markdown: |-
+      `urlopen` raises `urllib.error.HTTPError` for an HTTP error response.
+      That exception still has a status, headers, and readable response body,
+      so relay it just like a successful response. A connection failure raises
+      `urllib.error.URLError`, for which your firewall should return HTTP 502.
+      Forward response bytes with `self.wfile.write` and preserve `Content-Type`
+      and `X-Request-Id` when they are present.

@@ -54,13 +54,11 @@ stages:
 - slug: fi6
   name: Bind to a port
   difficulty: very_easy
-  marketing_md: In this stage, you'll start an HTTP server on port 8080, read the origin, detector, and policy flags,
-    and respond to health checks.
+  marketing_md: In this stage, you'll implement an HTTP server that responds to health checks on port `8080`.
 - slug: tf0
   name: Proxy the API
   difficulty: easy
-  marketing_md: In this stage, you'll forward chat completions requests and relay responses so an official OpenAI
-    SDK client works through your proxy unchanged.
+  marketing_md: In this stage, you'll implement a proxy for the chat completions API.
 - slug: kg7
   name: Block and log
   difficulty: easy
