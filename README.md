@@ -63,7 +63,8 @@ all four implemented stages.
 Stage 5 (`ro3`) includes
 [heuristic scoring instructions](stage_descriptions/base-05-ro3.md), Go/Python
 solutions and hints, policy-supplied substring and proximity signals, weighted
-request scores, deduplication, and threshold decisions in block and log modes.
+per-message results, deduplicated request summaries, and threshold decisions
+in block and log modes.
 Run `make -C ../firewall-tester test_stage_5` to exercise all five implemented
 stages.
 
@@ -82,8 +83,9 @@ retain their fallback behavior. Run `make -C ../firewall-tester test_stage_7`
 to exercise all seven implemented stages.
 
 Stage 8 (`qe5`) includes [DLP instructions](stage_descriptions/base-08-qe5.md),
-Go/Python solutions and hints, request-scoped numbered redaction, and buffered
-outgoing canary detection. It checks JSON-decoded response strings and preserves
+Go/Python solutions and hints, an input-redaction checkpoint with request-scoped
+numbered placeholders, and an output-canary checkpoint with buffered responses.
+It checks JSON-decoded response strings and preserves
 clean response bytes. Run `make -C ../firewall-tester test_stage_8` to
 exercise all eight implemented stages.
 

@@ -1,11 +1,10 @@
 hints:
   - title_markdown: "How do I keep each heuristic score with its message?"
     body_markdown: |-
-      Have extraction return one entry per message, containing its role and text
-      strings. Keep null-content entries too, so indices still line up with the
-      classifier results. Normalize each entry's strings and call your existing
-      score helper separately for each message. Keep the request-wide inspection
-      list for denylist matching and the existing diagnostic headers.
+      Stage 5 already keeps each message's role, texts, heuristic score, and
+      signal IDs. Reuse those entries with the classifier score at the same
+      index. Keep null-content entries too. Request-wide diagnostic scores
+      still summarize the union; they do not supply a message's paired score.
   - title_markdown:
       "Where should the new decision rules replace the old cutoffs?"
     body_markdown: |-

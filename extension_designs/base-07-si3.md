@@ -1,4 +1,10 @@
-# Stage 7: Decide with thresholds
+# Stage 7: Combine detection signals
+
+Current scoring progression: Stage 5 retains a score and signal IDs for every
+message, including empty-content entries, and summarizes the union for request
+decisions. Stage 7 reuses those scores with the classifier results rather than
+changing extraction or recomputing message heuristics. Request summaries and
+fallback behavior retain their existing meanings.
 
 Current inherited classifier behavior: sequential calls are sufficient, each call
 uses a 200 ms timeout, and failures use the fixed heuristic fallback from Stage 6.
@@ -18,7 +24,7 @@ An optional `decisions` object enables this stage. It contains `default` and
 heuristic settings. When the object is absent, earlier standalone cutoffs still
 apply. Existing Stage 6 content and solutions are preserved.
 
-Heuristic evidence is now grouped by message for successful combined decisions.
+Heuristic evidence has been grouped by message since Stage 5.
 Each signal contributes once within each message, with different signals across
 that message's text parts allowed to add. A proximity match cannot span parts or
 inspection candidates. Scores use the same normalization and one-layer decoding

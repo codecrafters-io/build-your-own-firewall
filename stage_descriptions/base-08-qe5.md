@@ -10,6 +10,13 @@ feature][cloudflare] scans incoming prompts and outgoing responses. Here, you'll
 implement two small mechanisms: replacing supplied sensitive patterns on the way
 to the origin, and detecting a fixed marker on the way back.
 
+Work through two checkpoints:
+
+1. **Redact incoming secrets.** Let an allowed request reach the origin with
+   matched values replaced by numbered placeholders.
+2. **Detect outgoing leaks.** Hold the origin response and reject it if it
+   exposes the configured canary.
+
 A **canary token** is a distinctive string the application plants in a system
 message. If the origin echoes it, your firewall can detect that output before
 releasing it. The application supplies the system message and the policy token.
@@ -51,7 +58,7 @@ candidates for denylist and heuristic matching, and original message objects
 for classification. After those checks allow forwarding, redact the origin
 request, send it, then inspect the origin response before releasing it.
 
-### Replace sensitive values with placeholders
+### Checkpoint 1: Redact incoming secrets
 
 For an allowed or logged request, traverse `messages` in array order. Inspect
 each message's string `content`, or each text part's `text` in array order.
@@ -97,7 +104,12 @@ Redaction also applies in `mode: "log"`. Log mode still controls the earlier
 input rules and their `X-Firewall-Match` header. It does not turn off data loss
 prevention.
 
-### Hold outgoing responses until checked
+Checkpoint 1 is complete when the origin receives placeholders, repeated values
+reuse their numbers, and a clean origin response still reaches the client. Use
+the request and expected origin messages in the Tests section to check this
+before adding output inspection.
+
+### Checkpoint 2: Detect outgoing canary leaks
 
 This stage uses non-streaming responses. Read the complete origin response body
 before sending its status, headers, or body to the client. Look for the canary
@@ -130,6 +142,10 @@ has already received one redacted request, unlike an input denial.
 If no marker appears, relay the origin's status, body bytes, `Content-Type`, and
 `X-Request-Id` unchanged, including clean origin errors. A partial marker or a
 lowercase version of an uppercase marker does not match.
+
+Checkpoint 2 is complete when a response containing the canary returns the
+`canary_leak` error without releasing origin content, while clean responses
+still pass through unchanged.
 
 ### Tests
 

@@ -1,7 +1,7 @@
 # Stage 10: Guard tool calls
 
 The approved design and request to continue authorize stage `as4`, difficulty
-`medium`. The new mechanism is action authorization: allowlisted function names
+`hard`. The new mechanism is action authorization: allowlisted function names
 and parsed destinations, including complete streamed argument strings.
 
 ## Contract decisions
@@ -96,7 +96,8 @@ explicit contracts. Forty-seven short API probes across five policy groups
 exceed the usual four-case target to isolate independent action, parsing,
 preservation and partial-release failures. Only the text-latency probe waits two
 seconds, and the first unlisted-action example is small enough to inspect by
-hand. The provisional medium difficulty is retained.
+hand. The provisional difficulty is hard: learners combine complete argument parsing,
+URL validation, streamed assembly, and atomic batch release in this stage.
 
 Tool strings are checked for the existing canary only when calls exist. An empty
 serialized batch is not tool content. A final-review regression uses a

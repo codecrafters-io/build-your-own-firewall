@@ -1,4 +1,4 @@
-@@ -218,68 +218,148 @@
+@@ -227,68 +227,148 @@
              if (target.scheme not in ("http", "https") or not target.hostname
                      or target.username is not None or target.netloc.endswith(":")
                      or (port is not None and not 1 <= port <= 65535)):
@@ -148,7 +148,7 @@
              call["function"]["arguments"] += fragment.get("function", {}).get("arguments", "")
          pending += delta.get("content") or ""
          if canary and canary in pending:
-@@ -296,50 +376,51 @@
+@@ -305,50 +385,51 @@
      parser.add_argument("--origin")
      parser.add_argument("--detector")
      parser.add_argument("--policy")
@@ -190,17 +190,17 @@
                  "",
              )
              score_headers = {}
+             message_scores = [(0, []) for _ in messages]
              heuristic_score = 0
              if "heuristics" in policy:
-                 score, signals = score_heuristics(inspection, policy["heuristics"])
+                 message_scores, score, signals = score_message_heuristics(
+                     messages, policy["heuristics"], policy.get("normalization")
+                 )
                  heuristic_score = score
                  score_headers["X-Firewall-Score"] = str(score)
                  if signals:
                      score_headers["X-Firewall-Signals"] = ",".join(signals)
-                 if not matched_rule and "decisions" not in policy and score >= policy["heuristics"]["threshold"]:
-                     matched_rule = "heuristic_score"
-             if "classifier" in policy:
-@@ -376,76 +457,78 @@
+@@ -387,76 +468,78 @@
              headers = {
                  name: self.headers[name]
                  for name in ("Authorization", "Content-Type")

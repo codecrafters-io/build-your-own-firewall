@@ -1,4 +1,4 @@
-@@ -407,95 +407,262 @@
+@@ -427,95 +427,262 @@
  	return ""
  }
 
@@ -262,7 +262,7 @@
  			return err
  		}
  		if len(chunk.Choices) == 0 {
-@@ -514,154 +681,160 @@
+@@ -534,154 +701,160 @@
  			call.Function.Arguments += fragment.Function.Arguments
  		}
  		pending += chunk.Choices[0].Delta.Content
@@ -421,12 +421,12 @@
  		}
  		heuristicScore := 0
  		if policy.Heuristics != nil {
- 			score, signals := scoreHeuristics(inspection, policy.Heuristics)
+ 			score, signals := scoreMessageHeuristics(messages, policy.Heuristics, policy.Normalization)
  			heuristicScore = score
  			w.Header().Set("X-Firewall-Score", strconv.Itoa(score))
  			if len(signals) > 0 {
  				w.Header().Set("X-Firewall-Signals", strings.Join(signals, ","))
-@@ -693,43 +866,43 @@
+@@ -713,43 +886,43 @@
  				if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
  					matchedRule = "heuristic_score"
  				}

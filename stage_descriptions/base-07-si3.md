@@ -51,21 +51,17 @@ earlier standalone `heuristics.threshold` and `classifier.threshold` decisions.
 Those older fields still apply when the new object is absent. The heuristic
 cutoff also remains the fail-open fallback when classification fails.
 
-### Pair the scores for each message
+### Combine the existing message scores
 
-Keep message boundaries while extracting text. Compute a heuristic score for
-each message using its own normalized and decoded inspection candidates. Each
-signal contributes its weight once **within that message**, even if it appears
-repeatedly or in several text parts. The same signal may contribute
-independently to another message.
+Stage 5 already retains each message's heuristic score and fired signal IDs.
+Stage 6 keeps classifier scores in the original message order. Reuse those
+results: pair each heuristic score with the classifier result at the same
+message index. Keep the original role to choose the threshold table.
 
-Different signals in one message's text parts can add together. A proximity
-signal still cannot join terms across text parts or inspection variants. Null or
-absent content contributes no heuristic signals. Keep an entry for such a
-message with heuristic score `0`; it still has its own classifier result and
-must not shift the indices of later messages.
-
-Pair that score with the classifier result for the same original message. Keep results in the same order as the original messages. Don't pair request-wide maxima or borrow evidence from another message.
+Null or absent content still has its own entry with heuristic score `0`.
+Repeated signals can contribute independently to different messages, while
+the request-wide diagnostic summary continues counting each signal once.
+Don't pair request-wide maxima or borrow evidence from another message.
 
 For example, suppose one user message has heuristic score `3` and classifier
 score `10`, while another has heuristic score `0` and classifier score `65`.

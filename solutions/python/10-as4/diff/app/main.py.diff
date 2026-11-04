@@ -25,7 +25,7 @@
      candidates = [normalize(text)]
      try:
          decoded = base64.b64decode(text, validate=True)
-@@ -162,73 +163,148 @@
+@@ -171,73 +172,148 @@
              for part in content:
                  part["text"] = redact(part["text"])
      return json.dumps(request).encode() if changed else body
@@ -178,7 +178,7 @@
          def do_GET(self):
              self.send_response(200 if self.path == "/health" else 404)
              self.end_headers()
-@@ -300,74 +376,79 @@
+@@ -311,74 +387,79 @@
              headers = {
                  name: self.headers[name]
                  for name in ("Authorization", "Content-Type")

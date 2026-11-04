@@ -41,27 +41,27 @@
  			if replacement, ok := settings.Homoglyphs[string(character)]; ok {
  				result.WriteString(replacement)
  			} else {
-@@ -124,57 +126,113 @@
- 			}
+@@ -161,57 +163,113 @@
+ func scoreMessageHeuristics(messages []inspectedMessage, settings *heuristicPolicy, normalization *normalizationPolicy) (int, []string) {
+ 	seen := map[string]bool{}
+ 	for index, message := range messages {
+ 		var candidates []string
+ 		for _, text := range message.Texts {
+ 			candidates = append(candidates, inspectionTexts(text, normalization)...)
+ 		}
+ 		score, signals := scoreHeuristics(candidates, settings)
+ 		messages[index].HeuristicScore = score
+ 		messages[index].Signals = signals
+ 		for _, id := range signals {
+ 			seen[id] = true
  		}
  	}
- 	return false
- }
-
- func scoreHeuristics(candidates []string, settings *heuristicPolicy) (int, []string) {
  	score := 0
  	var signals []string
  	for _, signal := range settings.Signals {
- 		for _, text := range candidates {
- 			matched := signal.Kind == "contains" && strings.Contains(text, signal.Term)
- 			if signal.Kind == "near" {
- 				matched = nearTerms(text, signal.Term, signal.Other, signal.MaxGap)
- 			}
- 			if matched {
- 				score += signal.Weight
- 				signals = append(signals, signal.ID)
- 				break
- 			}
+ 		if seen[signal.ID] {
+ 			score += signal.Weight
+ 			signals = append(signals, signal.ID)
  		}
  	}
  	return score, signals
@@ -156,9 +156,9 @@
  	}
  	proxy := &httputil.ReverseProxy{
  		Rewrite: func(request *httputil.ProxyRequest) {
-@@ -200,50 +258,68 @@
- 		for _, text := range texts {
- 			inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
+@@ -239,50 +297,68 @@
+ 				inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
+ 			}
  		}
  		matchedRule := ""
  		for _, rule := range policy.Denylist {
@@ -173,7 +173,7 @@
  			}
  		}
  		if policy.Heuristics != nil {
- 			score, signals := scoreHeuristics(inspection, policy.Heuristics)
+ 			score, signals := scoreMessageHeuristics(messages, policy.Heuristics, policy.Normalization)
  			w.Header().Set("X-Firewall-Score", strconv.Itoa(score))
  			if len(signals) > 0 {
  				w.Header().Set("X-Firewall-Signals", strings.Join(signals, ","))

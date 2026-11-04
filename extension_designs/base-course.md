@@ -24,25 +24,26 @@ record through the configured CRM email tool succeeds.
 
 ## Stage table
 
-| #   | Slug  | Stage                  | Difficulty  | New learner behavior                     | Tester assertions                                                                         | New harness                                              |
-| --- | ----- | ---------------------- | ----------- | ---------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| 1   | `fi6` | Bind to a port         | `very_easy` | Serve HTTP health checks                 | Two successful checks on port 8080, bounded startup, persistent process                   | Process lifecycle and health polling                     |
-| 2   | `tf0` | Proxy the API          | `easy`      | Forward chat completions                 | Preserve requests and responses, relay origin errors, return 502 on transport failure     | Mock origin, official SDK, raw traffic capture           |
-| 3   | `kg7` | Block and log          | `easy`      | Apply a supplied literal denylist        | Block before origin traffic, report matched rules, forward log-mode matches               | Policy runner, origin recorder, denial checks            |
-| 4   | `wt4` | Defeat evasion         | `medium`    | Inspect normalized and once-decoded text | Catch configured disguises, respect decoding bounds, preserve forwarded bytes             | Unicode and base64 probes                                |
-| 5   | `ro3` | Score with heuristics  | `medium`    | Aggregate weighted signals               | Count signals once, apply proximity rules, report score categories and signal IDs         | Heuristic header checks                                  |
-| 6   | `xd5` | Call the classifier    | `medium`    | Consult a fallible classifier adapter    | Classify original messages, apply a cutoff, fall back to existing rules        | Synthetic classifier and timing checks                   |
-| 7   | `si3` | Decide with thresholds | `medium`    | Combine scores within each message       | Use supplied role-sensitive thresholds, preserve score association and fallback behavior  | Decision-boundary and correlation probes                 |
-| 8   | `qe5` | Stop data leaks        | `medium`    | Protect traffic in both directions       | Redact with request-local placeholders, block outgoing canaries, preserve clean responses | DLP request and response checks                          |
-| 9   | `ou9` | Inspect streams        | `medium`    | Inspect incremental SSE content          | Catch split canaries, terminate denied streams, release safe text promptly                | Fragmented SSE origin, wire parser, latency checks       |
-| 10  | `as4` | Guard tool calls       | `medium`    | Authorize complete outgoing actions      | Check names and parsed destinations, preserve approved calls, withhold denied batches     | Tool fragments and official SDK accumulator              |
-| 11  | `mu9` | Stop the exfiltration  | `hard`      | Authorize private-value exports          | Resolve producing call IDs, require approved exports, block the streamed finale           | Private history fixtures and synthetic replay scoreboard |
+| #   | Slug  | Stage                           | Difficulty  | New learner behavior                                   | Tester assertions                                                                         | New harness                                              |
+| --- | ----- | ------------------------------- | ----------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 1   | `fi6` | Bind to a port                  | `very_easy` | Serve HTTP health checks                               | Two successful checks on port 8080, bounded startup, persistent process                   | Process lifecycle and health polling                     |
+| 2   | `tf0` | Proxy the API                   | `easy`      | Forward chat completions                               | Preserve requests and responses, relay origin errors, return 502 on transport failure     | Mock origin, official SDK, raw traffic capture           |
+| 3   | `kg7` | Block and log                   | `easy`      | Apply a supplied literal denylist                      | Block before origin traffic, report matched rules, forward log-mode matches               | Policy runner, origin recorder, denial checks            |
+| 4   | `wt4` | Defeat evasion                  | `medium`    | Inspect normalized and once-decoded text               | Catch configured disguises, respect decoding bounds, preserve forwarded bytes             | Unicode and base64 probes                                |
+| 5   | `ro3` | Score with heuristics           | `medium`    | Retain message signals and summarize their union       | Count signals once, apply proximity rules, report score categories and signal IDs         | Heuristic header checks                                  |
+| 6   | `xd5` | Call the classifier             | `medium`    | Consult a fallible classifier adapter                  | Classify original messages, apply a cutoff, fall back to existing rules                   | Synthetic classifier and timing checks                   |
+| 7   | `si3` | Combine detection signals       | `medium`    | Combine scores within each message                     | Use supplied role-sensitive thresholds, preserve score association and fallback behavior  | Decision-boundary and correlation probes                 |
+| 8   | `qe5` | Redact secrets and detect leaks | `medium`    | Complete input-redaction and output-canary checkpoints | Redact with request-local placeholders, block outgoing canaries, preserve clean responses | DLP request and response checks                          |
+| 9   | `ou9` | Inspect streams                 | `medium`    | Inspect incremental SSE content                        | Catch split canaries, terminate denied streams, release safe text promptly                | Fragmented SSE origin, wire parser, latency checks       |
+| 10  | `as4` | Guard tool calls                | `hard`      | Authorize complete outgoing actions                    | Check names and parsed destinations, preserve approved calls, withhold denied batches     | Tool fragments and official SDK accumulator              |
+| 11  | `mu9` | Stop the exfiltration           | `hard`      | Authorize private-value exports                        | Resolve producing call IDs, require approved exports, block the streamed finale           | Private history fixtures and synthetic replay scoreboard |
 
 Every stage adds behavior that the preceding solution lacks. Earlier solutions
 are deliberately exercised against new stages to verify that distinction.
 Difficulty starts with a small server task, advances one tier at a time, and has
-one hard finale. The individual `base-NN-slug.md` design records retain the full
-assertion lists, source inventories, alternatives, and verification evidence.
+two hard final stages. The individual `base-NN-slug.md` design records retain
+the full assertion lists, source inventories, alternatives, and verification
+evidence.
 
 ## Fidelity and validation decisions
 

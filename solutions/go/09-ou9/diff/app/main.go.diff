@@ -28,7 +28,7 @@
  	ZeroWidth  []string          `json:"zero_width"`
  	Homoglyphs map[string]string `json:"homoglyphs"`
  }
-@@ -320,50 +321,107 @@
+@@ -340,50 +341,107 @@
  		return false
  	}
  	var contains func(any) bool
@@ -136,7 +136,7 @@
  	}
  	if err := json.Unmarshal(data, &policy); err != nil {
  		fmt.Fprintln(os.Stderr, err)
-@@ -385,50 +443,69 @@
+@@ -405,50 +463,69 @@
  	proxy := &httputil.ReverseProxy{
  		Rewrite: func(request *httputil.ProxyRequest) {
  			request.SetURL(target)
@@ -206,7 +206,7 @@
  		for _, rule := range policy.Denylist {
  			for _, text := range inspection {
  				if strings.Contains(text, rule.Term) {
-@@ -471,39 +548,47 @@
+@@ -491,39 +568,47 @@
  					}
  				}
  			} else {

@@ -1,4 +1,4 @@
-@@ -161,50 +161,82 @@
+@@ -170,50 +170,82 @@
          elif isinstance(content, list):
              for part in content:
                  part["text"] = redact(part["text"])
@@ -81,9 +81,9 @@
              body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
              messages = inspect_messages(body)
              if messages is None:
-@@ -250,67 +282,88 @@
-                             matched_rule = decision_rule(messages, scores, policy["decisions"],
-                                                          policy.get("heuristics"), policy.get("normalization"))
+@@ -261,67 +293,88 @@
+                         if "decisions" in policy:
+                             matched_rule = decision_rule(messages, message_scores, scores, policy["decisions"])
                          elif highest >= policy["classifier"]["threshold"]:
                              matched_rule = "classifier_score"
              if matched_rule and policy.get("mode", "block") != "log":

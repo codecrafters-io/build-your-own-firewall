@@ -1,4 +1,8 @@
-# Stage 8: Stop data leaks
+# Stage 8: Redact secrets and detect leaks
+
+Learners complete two explicit checkpoints in this stage: first input redaction,
+verified at the origin, then outgoing canary detection, verified at the client.
+Both remain in one stage and retain their existing protocol contracts.
 
 The approved design and request to continue authorize stage `qe5`, difficulty
 `medium`. Its mechanism is bidirectional DLP: numbered input redaction and an

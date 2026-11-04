@@ -56,11 +56,13 @@ func inspectionTexts(text string, settings *normalizationPolicy) []string {
 }
 
 type inspectedMessage struct {
-	Role  string
-	Texts []string
+	Role           string
+	Texts          []string
+	HeuristicScore int
+	Signals        []string
 }
 
-// Keep message boundaries so a classifier result is paired with its own clues.
+// Keep roles and text grouped by their original message index.
 func inspectMessages(body []byte) ([]inspectedMessage, bool) {
 	var request struct {
 		Messages []struct {
@@ -159,6 +161,32 @@ func scoreHeuristics(candidates []string, settings *heuristicPolicy) (int, []str
 	return score, signals
 }
 
+// Retain message results and count each signal once in the request summary.
+func scoreMessageHeuristics(messages []inspectedMessage, settings *heuristicPolicy, normalization *normalizationPolicy) (int, []string) {
+	seen := map[string]bool{}
+	for index, message := range messages {
+		var candidates []string
+		for _, text := range message.Texts {
+			candidates = append(candidates, inspectionTexts(text, normalization)...)
+		}
+		score, signals := scoreHeuristics(candidates, settings)
+		messages[index].HeuristicScore = score
+		messages[index].Signals = signals
+		for _, id := range signals {
+			seen[id] = true
+		}
+	}
+	score := 0
+	var signals []string
+	for _, signal := range settings.Signals {
+		if seen[signal.ID] {
+			score += signal.Weight
+			signals = append(signals, signal.ID)
+		}
+	}
+	return score, signals
+}
+
 type classifierPolicy struct {
 	Threshold int `json:"threshold"`
 }
@@ -225,7 +253,7 @@ type decisionPolicy struct {
 	Tool    scoreThresholds `json:"tool"`
 }
 
-func decisionRule(messages []inspectedMessage, scores []int, settings *decisionPolicy, heuristics *heuristicPolicy, normalization *normalizationPolicy) string {
+func decisionRule(messages []inspectedMessage, scores []int, settings *decisionPolicy) string {
 	for index, message := range messages {
 		thresholds := settings.Default
 		if message.Role == "tool" {
@@ -234,15 +262,7 @@ func decisionRule(messages []inspectedMessage, scores []int, settings *decisionP
 		if scores[index] >= thresholds.ClassifierHigh {
 			return "classifier_high"
 		}
-		heuristicScore := 0
-		if heuristics != nil {
-			var candidates []string
-			for _, text := range message.Texts {
-				candidates = append(candidates, inspectionTexts(text, normalization)...)
-			}
-			heuristicScore, _ = scoreHeuristics(candidates, heuristics)
-		}
-		if scores[index] >= thresholds.ClassifierMedium && heuristicScore >= thresholds.HeuristicMedium {
+		if scores[index] >= thresholds.ClassifierMedium && message.HeuristicScore >= thresholds.HeuristicMedium {
 			return "combined_scores"
 		}
 	}
@@ -519,7 +539,7 @@ func main() {
 		}
 		heuristicScore := 0
 		if policy.Heuristics != nil {
-			score, signals := scoreHeuristics(inspection, policy.Heuristics)
+			score, signals := scoreMessageHeuristics(messages, policy.Heuristics, policy.Normalization)
 			heuristicScore = score
 			w.Header().Set("X-Firewall-Score", strconv.Itoa(score))
 			if len(signals) > 0 {
@@ -542,7 +562,7 @@ func main() {
 				w.Header().Set("X-Firewall-Detector-Status", "ok")
 				if matchedRule == "" {
 					if policy.Decisions != nil {
-						matchedRule = decisionRule(messages, scores, policy.Decisions, policy.Heuristics, policy.Normalization)
+						matchedRule = decisionRule(messages, scores, policy.Decisions)
 					} else if highest >= policy.Classifier.Threshold {
 						matchedRule = "classifier_score"
 					}

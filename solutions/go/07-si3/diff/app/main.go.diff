@@ -1,107 +1,4 @@
-@@ -31,86 +31,95 @@
- 		return []string{text}
- 	}
- 	normalize := func(value string) string {
- 		for _, character := range settings.ZeroWidth {
- 			value = strings.ReplaceAll(value, character, "")
- 		}
- 		value = cases.Fold().String(norm.NFKC.String(value))
- 		var result strings.Builder
- 		for _, character := range value {
- 			if replacement, ok := settings.Homoglyphs[string(character)]; ok {
- 				result.WriteString(replacement)
- 			} else {
- 				result.WriteRune(character)
- 			}
- 		}
- 		return result.String()
- 	}
- 	candidates := []string{normalize(text)}
- 	decoded, err := base64.StdEncoding.DecodeString(text)
- 	if err == nil && utf8.Valid(decoded) {
- 		candidates = append(candidates, normalize(string(decoded)))
- 	}
- 	return candidates
- }
-
--// messageTexts returns every string the model reads from the request's messages.
--// It reports false when the request can't be inspected, so the caller fails closed.
--func messageTexts(body []byte) ([]string, bool) {
-+type inspectedMessage struct {
-+	Role  string
-+	Texts []string
-+}
-+
-+// Keep message boundaries so a classifier result is paired with its own clues.
-+func inspectMessages(body []byte) ([]inspectedMessage, bool) {
- 	var request struct {
- 		Messages []struct {
-+			Role    string          `json:"role"`
- 			Content json.RawMessage `json:"content"`
- 		} `json:"messages"`
- 	}
- 	if json.Unmarshal(body, &request) != nil || request.Messages == nil {
- 		return nil, false
- 	}
--	var texts []string
-+	var messages []inspectedMessage
- 	for _, message := range request.Messages {
-+		current := inspectedMessage{Role: message.Role}
- 		if len(message.Content) == 0 || string(message.Content) == "null" {
-+			messages = append(messages, current)
- 			continue
- 		}
- 		var text string
- 		if json.Unmarshal(message.Content, &text) == nil {
--			texts = append(texts, text)
-+			current.Texts = []string{text}
-+			messages = append(messages, current)
- 			continue
- 		}
- 		var parts []struct {
- 			Type string  `json:"type"`
- 			Text *string `json:"text"`
- 		}
- 		if json.Unmarshal(message.Content, &parts) != nil {
- 			return nil, false
- 		}
- 		for _, part := range parts {
- 			if part.Type != "text" || part.Text == nil {
- 				return nil, false
- 			}
--			texts = append(texts, *part.Text)
-+			current.Texts = append(current.Texts, *part.Text)
- 		}
-+		messages = append(messages, current)
- 	}
--	return texts, true
-+	return messages, true
- }
-
- type heuristicSignal struct {
- 	ID     string `json:"id"`
- 	Weight int    `json:"weight"`
- 	Kind   string `json:"kind"`
- 	Term   string `json:"term"`
- 	Other  string `json:"other"`
- 	MaxGap int    `json:"max_gap"`
- }
-
- type heuristicPolicy struct {
- 	Threshold int               `json:"threshold"`
- 	Signals   []heuristicSignal `json:"signals"`
- }
-
- // nearTerms checks all non-overlapping occurrences in either order.
- func nearTerms(text, first, second string, maxGap int) bool {
- 	positions := func(term string) []int {
- 		var found []int
- 		for start := 0; start <= len(text)-len(term); start++ {
- 			if strings.HasPrefix(text[start:], term) {
- 				found = append(found, start)
- 			}
- 		}
-@@ -181,143 +190,190 @@
+@@ -218,57 +218,85 @@
  	if err != nil {
  		return 0, false
  	}
@@ -138,7 +35,7 @@
 +	Tool    scoreThresholds `json:"tool"`
 +}
 +
-+func decisionRule(messages []inspectedMessage, scores []int, settings *decisionPolicy, heuristics *heuristicPolicy, normalization *normalizationPolicy) string {
++func decisionRule(messages []inspectedMessage, scores []int, settings *decisionPolicy) string {
 +	for index, message := range messages {
 +		thresholds := settings.Default
 +		if message.Role == "tool" {
@@ -147,15 +44,7 @@
 +		if scores[index] >= thresholds.ClassifierHigh {
 +			return "classifier_high"
 +		}
-+		heuristicScore := 0
-+		if heuristics != nil {
-+			var candidates []string
-+			for _, text := range message.Texts {
-+				candidates = append(candidates, inspectionTexts(text, normalization)...)
-+			}
-+			heuristicScore, _ = scoreHeuristics(candidates, heuristics)
-+		}
-+		if scores[index] >= thresholds.ClassifierMedium && heuristicScore >= thresholds.HeuristicMedium {
++		if scores[index] >= thresholds.ClassifierMedium && message.HeuristicScore >= thresholds.HeuristicMedium {
 +			return "combined_scores"
 +		}
 +	}
@@ -195,33 +84,19 @@
  		os.Exit(1)
  	}
  	proxy := &httputil.ReverseProxy{
- 		Rewrite: func(request *httputil.ProxyRequest) {
- 			request.SetURL(target)
- 		},
- 	}
- 	http.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
- 		if r.Method != http.MethodPost {
- 			w.WriteHeader(http.StatusMethodNotAllowed)
+@@ -287,76 +315,85 @@
  			return
  		}
- 		body, err := io.ReadAll(r.Body)
- 		if err != nil {
- 			http.Error(w, "Could not read request", http.StatusBadRequest)
- 			return
- 		}
--		texts, ok := messageTexts(body)
-+		messages, ok := inspectMessages(body)
+ 		messages, ok := inspectMessages(body)
  		if !ok {
  			http.Error(w, "Could not inspect request", http.StatusBadRequest)
  			return
  		}
  		var inspection []string
--		for _, text := range texts {
--			inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
-+		for _, message := range messages {
-+			for _, text := range message.Texts {
-+				inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
-+			}
+ 		for _, message := range messages {
+ 			for _, text := range message.Texts {
+ 				inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
+ 			}
  		}
  		matchedRule := ""
  		for _, rule := range policy.Denylist {
@@ -237,7 +112,7 @@
  		}
 +		heuristicScore := 0
  		if policy.Heuristics != nil {
- 			score, signals := scoreHeuristics(inspection, policy.Heuristics)
+ 			score, signals := scoreMessageHeuristics(messages, policy.Heuristics, policy.Normalization)
 +			heuristicScore = score
  			w.Header().Set("X-Firewall-Score", strconv.Itoa(score))
  			if len(signals) > 0 {
@@ -263,7 +138,7 @@
 -					matchedRule = "classifier_score"
 +				if matchedRule == "" {
 +					if policy.Decisions != nil {
-+						matchedRule = decisionRule(messages, scores, policy.Decisions, policy.Heuristics, policy.Normalization)
++						matchedRule = decisionRule(messages, scores, policy.Decisions)
 +					} else if highest >= policy.Classifier.Threshold {
 +						matchedRule = "classifier_score"
 +					}

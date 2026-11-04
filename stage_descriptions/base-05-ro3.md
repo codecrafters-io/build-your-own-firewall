@@ -97,14 +97,38 @@ variant when normalization is enabled. Match each candidate independently. Don't
 join strings across messages, text parts, or encoded variants to satisfy a
 proximity signal. Without `normalization`, inspection remains literal.
 
-### Score the request
+### Keep a result for each message
 
-Start `heuristic_score` at zero for each request. For every signal that fires
-anywhere in the extracted message text, add its weight **once** and record its
-ID. Repeated occurrences, multiple messages, multiple text parts, and a match in
-both the normalized original and decoded variant must not add the same signal
-again. Different signals can fire in different messages and still contribute to
-this request's total. Evaluate every signal, even after reaching the threshold.
+Keep the original message order and role while extracting text. For each
+message, inspect its own text strings and record a heuristic score and the IDs
+of the signals that fired. Each signal adds its weight once within that
+message, even when it appears repeatedly or in several text parts or inspection
+variants. Different signals in the same message can add together. A proximity
+signal must still match within one text string and one inspection variant.
+
+Keep an entry with score `0` and no signal IDs for null or absent content. Its
+place in the conversation matters: later stages will associate a classifier
+score with that same message. A useful internal result looks like this:
+
+| Message index | Role      | Heuristic score | Signal IDs   |
+| ------------- | --------- | --------------- | ------------ |
+| 0             | user      | 3               | `role-token` |
+| 1             | assistant | 0               | none         |
+| 2             | tool      | 3               | `role-token` |
+
+Here, messages 0 and 2 each contain `[system]`. Evaluate every configured
+signal for each message, even after reaching the request's cutoff.
+
+### Summarize the request
+
+Build the union of signal IDs across the message results. Add each fired
+signal's weight **once across the request**, using the supplied policy. This
+request score still controls this stage's decision and response headers.
+Different signals in different messages can contribute to the total.
+
+Do not add the per-message scores together. The example above has request
+score `3`, rather than `6`, because both messages fired the same signal. Keep
+the message results internally; no extra response header is required for them.
 
 When `heuristics` is present, include these response headers for inspected
 `POST /v1/chat/completions` requests, whether forwarded or blocked, including
@@ -187,8 +211,9 @@ from earlier stages working.
 
 ### Notes
 
-- These are request-level scores over message text. Don't inspect model names,
-  tool arguments, or other JSON fields for heuristic signals.
+- The request summary controls this stage's decision. Keep the per-message
+  results for later detector combinations. Don't inspect model names, tool
+  arguments, or other JSON fields for heuristic signals.
 - Keep rejecting malformed requests and unsupported content with HTTP `400`
   before scoring or forwarding, as in Stage 3.
 - Policy files in this stage use only `contains` and `near`. Regular

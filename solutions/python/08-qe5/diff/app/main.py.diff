@@ -25,7 +25,11 @@
      try:
          decoded = base64.b64decode(text, validate=True)
          candidates.append(normalize(decoded.decode("utf-8")))
-@@ -105,60 +106,116 @@
+@@ -114,60 +115,116 @@
+             if type(score) is not int or not 0 <= score <= 100:
+                 raise ValueError("Invalid classifier score")
+             return score
+
      scores = []
      available = True
      for message in messages:
@@ -36,15 +40,11 @@
      return scores if available else None
 
 
- def decision_rule(messages, scores, settings, heuristics, normalization):
-     for (role, texts), classifier_score in zip(messages, scores):
+ def decision_rule(messages, message_scores, scores, settings):
+     for (role, _), (heuristic_score, _), classifier_score in zip(messages, message_scores, scores):
          thresholds = settings["tool" if role == "tool" else "default"]
          if classifier_score >= thresholds["classifier_high"]:
              return "classifier_high"
-         heuristic_score = 0
-         if heuristics is not None:
-             candidates = [candidate for text in texts for candidate in inspection_texts(text, normalization)]
-             heuristic_score, _ = score_heuristics(candidates, heuristics)
          if (classifier_score >= thresholds["classifier_medium"]
                  and heuristic_score >= thresholds["heuristic_medium"]):
              return "combined_scores"
@@ -142,11 +142,11 @@
              matched_rule = next(
                  (
                      rule["id"]
-@@ -191,60 +248,73 @@
+@@ -202,60 +259,73 @@
+                     score_headers["X-Firewall-Classifier-Score"] = str(highest)
                      if not matched_rule:
                          if "decisions" in policy:
-                             matched_rule = decision_rule(messages, scores, policy["decisions"],
-                                                          policy.get("heuristics"), policy.get("normalization"))
+                             matched_rule = decision_rule(messages, message_scores, scores, policy["decisions"])
                          elif highest >= policy["classifier"]["threshold"]:
                              matched_rule = "classifier_score"
              if matched_rule and policy.get("mode", "block") != "log":

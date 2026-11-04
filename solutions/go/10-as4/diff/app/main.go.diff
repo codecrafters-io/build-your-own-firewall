@@ -41,7 +41,7 @@
  		value = cases.Fold().String(norm.NFKC.String(value))
  		var result strings.Builder
  		for _, character := range value {
-@@ -321,186 +322,326 @@
+@@ -341,186 +342,326 @@
  		return false
  	}
  	var contains func(any) bool
@@ -383,7 +383,7 @@
  			for _, text := range message.Texts {
  				inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
  			}
-@@ -552,43 +693,43 @@
+@@ -572,43 +713,43 @@
  				if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
  					matchedRule = "heuristic_score"
  				}

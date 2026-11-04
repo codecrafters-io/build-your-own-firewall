@@ -5,10 +5,11 @@ hints:
       scanning the candidate. For each pair, check both orders, exclude overlaps,
       and count the intervening Unicode characters with `utf8.RuneCountInString`.
       Byte offsets can locate substrings, but byte lengths are not character gaps.
-  - title_markdown: "How do I avoid counting a signal twice?"
+  - title_markdown: "How do I keep message scores and summarize the request?"
     body_markdown: |-
-      Loop over the policy's signals first, then over all inspection candidates.
-      On the first match, add that signal's weight, append its ID, and break only
-      the inner loop. Keep evaluating other signals. Use `strconv.Itoa` for the
-      score header and `strings.Join` for the signal header. Reset the result
-      for each request and keep denylist matches ahead of the threshold decision.
+      Keep one entry per original message, including its role and text strings.
+      Run the signal matcher independently for each entry and retain its score
+      and fired IDs. Null content keeps a zero-score entry. Build a union of
+      fired IDs, then sum their policy weights once for the request summary.
+      Do not sum message scores: the same signal may fire in several messages.
+      Keep the existing score headers and denylist precedence.

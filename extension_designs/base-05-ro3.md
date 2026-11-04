@@ -1,5 +1,11 @@
 # Stage 5: Score with heuristics
 
+Current scoring progression: Stage 5 retains a score and signal IDs for every
+message, including empty-content entries, and summarizes the union for request
+decisions. Stage 7 reuses those scores with the classifier results rather than
+changing extraction or recomputing message heuristics. Request summaries and
+fallback behavior retain their existing meanings.
+
 The approved course design and request to continue with stage 5 establish this
 scope. The allocated slug is `ro3` and its difficulty is `medium`.
 

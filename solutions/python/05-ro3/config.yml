@@ -5,10 +5,11 @@ hints:
       term. Compare every pair in both orders. The gap runs from the end of one
       term to the start of the other and must be nonnegative and at most
       `max_gap`. Python string lengths count Unicode code points.
-  - title_markdown: "Where should I accumulate weights?"
+  - title_markdown: "How do I keep message scores and summarize the request?"
     body_markdown: |-
-      Start with a fresh score and list of IDs for each request. Loop over signals,
-      then candidates. Once a signal matches, add its weight once and break the
-      candidate loop. Evaluate every signal before comparing the total with the
-      threshold. Add the score and comma-separated IDs to both allowed and blocked
-      responses. Log mode still forwards the original bytes.
+      Keep one entry per original message, including its role and text strings.
+      Run the signal matcher independently for each entry and retain its score
+      and fired IDs. Null content keeps a zero-score entry. Build a union of
+      fired IDs, then sum their policy weights once for the request summary.
+      Do not sum message scores: the same signal may fire in several messages.
+      Keep the existing score headers and denylist precedence.

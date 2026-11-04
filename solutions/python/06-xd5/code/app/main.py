@@ -28,11 +28,12 @@ def inspection_texts(text, settings):
     return candidates
 
 
-def message_texts(body):
-    """Return every string the model reads, or None if the request can't be inspected."""
+def inspect_messages(body):
+    """Keep roles and text grouped by their original message index."""
     try:
-        texts = []
+        messages = []
         for message in json.loads(body)["messages"]:
+            texts = []
             content = message.get("content")
             if isinstance(content, str):
                 texts.append(content)
@@ -43,7 +44,8 @@ def message_texts(body):
                     texts.append(part["text"])
             elif content is not None:
                 return None
-        return texts
+            messages.append((message.get("role"), texts))
+        return messages
     except (ValueError, KeyError, TypeError, AttributeError):
         return None
 
@@ -73,6 +75,19 @@ def score_heuristics(candidates, settings):
                 signals.append(signal["id"])
                 break
     return score, signals
+
+
+def score_message_heuristics(messages, settings, normalization):
+    results = []
+    seen = set()
+    for _, texts in messages:
+        candidates = [candidate for text in texts for candidate in inspection_texts(text, normalization)]
+        score, signals = score_heuristics(candidates, settings)
+        results.append((score, signals))
+        seen.update(signals)
+    signals = [signal["id"] for signal in settings["signals"] if signal["id"] in seen]
+    score = sum(signal["weight"] for signal in settings["signals"] if signal["id"] in seen)
+    return results, score, signals
 
 
 class NoDetectorRedirect(urllib.request.HTTPRedirectHandler):
@@ -132,12 +147,13 @@ def main():
                 self.send_error(404)
                 return
             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-            texts = message_texts(body)
-            if texts is None:
+            messages = inspect_messages(body)
+            if messages is None:
                 self.send_error(400, "Could not inspect request")
                 return
             inspection = [
                 candidate
+                for _, texts in messages
                 for text in texts
                 for candidate in inspection_texts(text, policy.get("normalization"))
             ]
@@ -150,8 +166,11 @@ def main():
                 "",
             )
             score_headers = {}
+            message_scores = [(0, []) for _ in messages]
             if "heuristics" in policy:
-                score, signals = score_heuristics(inspection, policy["heuristics"])
+                message_scores, score, signals = score_message_heuristics(
+                    messages, policy["heuristics"], policy.get("normalization")
+                )
                 score_headers["X-Firewall-Score"] = str(score)
                 if signals:
                     score_headers["X-Firewall-Signals"] = ",".join(signals)

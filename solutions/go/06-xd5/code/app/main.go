@@ -53,25 +53,35 @@ func inspectionTexts(text string, settings *normalizationPolicy) []string {
 	return candidates
 }
 
-// messageTexts returns every string the model reads from the request's messages.
-// It reports false when the request can't be inspected, so the caller fails closed.
-func messageTexts(body []byte) ([]string, bool) {
+type inspectedMessage struct {
+	Role           string
+	Texts          []string
+	HeuristicScore int
+	Signals        []string
+}
+
+// Keep roles and text grouped by their original message index.
+func inspectMessages(body []byte) ([]inspectedMessage, bool) {
 	var request struct {
 		Messages []struct {
+			Role    string          `json:"role"`
 			Content json.RawMessage `json:"content"`
 		} `json:"messages"`
 	}
 	if json.Unmarshal(body, &request) != nil || request.Messages == nil {
 		return nil, false
 	}
-	var texts []string
+	var messages []inspectedMessage
 	for _, message := range request.Messages {
+		current := inspectedMessage{Role: message.Role}
 		if len(message.Content) == 0 || string(message.Content) == "null" {
+			messages = append(messages, current)
 			continue
 		}
 		var text string
 		if json.Unmarshal(message.Content, &text) == nil {
-			texts = append(texts, text)
+			current.Texts = []string{text}
+			messages = append(messages, current)
 			continue
 		}
 		var parts []struct {
@@ -85,10 +95,11 @@ func messageTexts(body []byte) ([]string, bool) {
 			if part.Type != "text" || part.Text == nil {
 				return nil, false
 			}
-			texts = append(texts, *part.Text)
+			current.Texts = append(current.Texts, *part.Text)
 		}
+		messages = append(messages, current)
 	}
-	return texts, true
+	return messages, true
 }
 
 type heuristicSignal struct {
@@ -143,6 +154,32 @@ func scoreHeuristics(candidates []string, settings *heuristicPolicy) (int, []str
 				signals = append(signals, signal.ID)
 				break
 			}
+		}
+	}
+	return score, signals
+}
+
+// Retain message results and count each signal once in the request summary.
+func scoreMessageHeuristics(messages []inspectedMessage, settings *heuristicPolicy, normalization *normalizationPolicy) (int, []string) {
+	seen := map[string]bool{}
+	for index, message := range messages {
+		var candidates []string
+		for _, text := range message.Texts {
+			candidates = append(candidates, inspectionTexts(text, normalization)...)
+		}
+		score, signals := scoreHeuristics(candidates, settings)
+		messages[index].HeuristicScore = score
+		messages[index].Signals = signals
+		for _, id := range signals {
+			seen[id] = true
+		}
+	}
+	score := 0
+	var signals []string
+	for _, signal := range settings.Signals {
+		if seen[signal.ID] {
+			score += signal.Weight
+			signals = append(signals, signal.ID)
 		}
 	}
 	return score, signals
@@ -249,14 +286,16 @@ func main() {
 			http.Error(w, "Could not read request", http.StatusBadRequest)
 			return
 		}
-		texts, ok := messageTexts(body)
+		messages, ok := inspectMessages(body)
 		if !ok {
 			http.Error(w, "Could not inspect request", http.StatusBadRequest)
 			return
 		}
 		var inspection []string
-		for _, text := range texts {
-			inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
+		for _, message := range messages {
+			for _, text := range message.Texts {
+				inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
+			}
 		}
 		matchedRule := ""
 		for _, rule := range policy.Denylist {
@@ -271,7 +310,7 @@ func main() {
 			}
 		}
 		if policy.Heuristics != nil {
-			score, signals := scoreHeuristics(inspection, policy.Heuristics)
+			score, signals := scoreMessageHeuristics(messages, policy.Heuristics, policy.Normalization)
 			w.Header().Set("X-Firewall-Score", strconv.Itoa(score))
 			if len(signals) > 0 {
 				w.Header().Set("X-Firewall-Signals", strings.Join(signals, ","))

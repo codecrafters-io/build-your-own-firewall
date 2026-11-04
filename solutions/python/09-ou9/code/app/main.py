@@ -30,7 +30,7 @@ def inspection_texts(text, settings):
 
 
 def inspect_messages(body):
-    """Keep each role and text group aligned with its classifier result."""
+    """Keep roles and text grouped by their original message index."""
     try:
         messages = []
         for message in json.loads(body)["messages"]:
@@ -78,6 +78,19 @@ def score_heuristics(candidates, settings):
     return score, signals
 
 
+def score_message_heuristics(messages, settings, normalization):
+    results = []
+    seen = set()
+    for _, texts in messages:
+        candidates = [candidate for text in texts for candidate in inspection_texts(text, normalization)]
+        score, signals = score_heuristics(candidates, settings)
+        results.append((score, signals))
+        seen.update(signals)
+    signals = [signal["id"] for signal in settings["signals"] if signal["id"] in seen]
+    score = sum(signal["weight"] for signal in settings["signals"] if signal["id"] in seen)
+    return results, score, signals
+
+
 class NoDetectorRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, response, code, message, headers, new_url):
         return None
@@ -113,15 +126,11 @@ def classify_messages(body, endpoint, opener):
     return scores if available else None
 
 
-def decision_rule(messages, scores, settings, heuristics, normalization):
-    for (role, texts), classifier_score in zip(messages, scores):
+def decision_rule(messages, message_scores, scores, settings):
+    for (role, _), (heuristic_score, _), classifier_score in zip(messages, message_scores, scores):
         thresholds = settings["tool" if role == "tool" else "default"]
         if classifier_score >= thresholds["classifier_high"]:
             return "classifier_high"
-        heuristic_score = 0
-        if heuristics is not None:
-            candidates = [candidate for text in texts for candidate in inspection_texts(text, normalization)]
-            heuristic_score, _ = score_heuristics(candidates, heuristics)
         if (classifier_score >= thresholds["classifier_medium"]
                 and heuristic_score >= thresholds["heuristic_medium"]):
             return "combined_scores"
@@ -257,9 +266,12 @@ def main():
                 "",
             )
             score_headers = {}
+            message_scores = [(0, []) for _ in messages]
             heuristic_score = 0
             if "heuristics" in policy:
-                score, signals = score_heuristics(inspection, policy["heuristics"])
+                message_scores, score, signals = score_message_heuristics(
+                    messages, policy["heuristics"], policy.get("normalization")
+                )
                 heuristic_score = score
                 score_headers["X-Firewall-Score"] = str(score)
                 if signals:
@@ -279,8 +291,7 @@ def main():
                     score_headers["X-Firewall-Classifier-Score"] = str(highest)
                     if not matched_rule:
                         if "decisions" in policy:
-                            matched_rule = decision_rule(messages, scores, policy["decisions"],
-                                                         policy.get("heuristics"), policy.get("normalization"))
+                            matched_rule = decision_rule(messages, message_scores, scores, policy["decisions"])
                         elif highest >= policy["classifier"]["threshold"]:
                             matched_rule = "classifier_score"
             if matched_rule and policy.get("mode", "block") != "log":

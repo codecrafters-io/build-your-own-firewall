@@ -39,9 +39,17 @@
  		value = cases.Fold().String(norm.NFKC.String(value))
  		var result strings.Builder
  		for _, character := range value {
-@@ -225,87 +226,209 @@
+@@ -245,87 +246,209 @@
+ 	ClassifierMedium int `json:"classifier_medium"`
+ 	HeuristicMedium  int `json:"heuristic_medium"`
+ }
 
- func decisionRule(messages []inspectedMessage, scores []int, settings *decisionPolicy, heuristics *heuristicPolicy, normalization *normalizationPolicy) string {
+ type decisionPolicy struct {
+ 	Default scoreThresholds `json:"default"`
+ 	Tool    scoreThresholds `json:"tool"`
+ }
+
+ func decisionRule(messages []inspectedMessage, scores []int, settings *decisionPolicy) string {
  	for index, message := range messages {
  		thresholds := settings.Default
  		if message.Role == "tool" {
@@ -50,15 +58,7 @@
  		if scores[index] >= thresholds.ClassifierHigh {
  			return "classifier_high"
  		}
- 		heuristicScore := 0
- 		if heuristics != nil {
- 			var candidates []string
- 			for _, text := range message.Texts {
- 				candidates = append(candidates, inspectionTexts(text, normalization)...)
- 			}
- 			heuristicScore, _ = scoreHeuristics(candidates, heuristics)
- 		}
- 		if scores[index] >= thresholds.ClassifierMedium && heuristicScore >= thresholds.HeuristicMedium {
+ 		if scores[index] >= thresholds.ClassifierMedium && message.HeuristicScore >= thresholds.HeuristicMedium {
  			return "combined_scores"
  		}
  	}
@@ -249,10 +249,10 @@
  		for _, rule := range policy.Denylist {
  			for _, text := range inspection {
  				if strings.Contains(text, rule.Term) {
-@@ -343,40 +466,44 @@
+@@ -363,40 +486,44 @@
  				if matchedRule == "" {
  					if policy.Decisions != nil {
- 						matchedRule = decisionRule(messages, scores, policy.Decisions, policy.Heuristics, policy.Normalization)
+ 						matchedRule = decisionRule(messages, scores, policy.Decisions)
  					} else if highest >= policy.Classifier.Threshold {
  						matchedRule = "classifier_score"
  					}
