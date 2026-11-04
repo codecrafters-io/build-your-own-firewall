@@ -8,6 +8,9 @@ can inspect traffic, it needs a place to receive requests. Binding to a port
 means asking the operating system to deliver connections on that port to your
 program.
 
+In the next stage, this same server will receive chat requests and forward them
+to the model API.
+
 A health check is a small request that confirms a server can answer. For this
 course, you'll expose `GET /health`. Returning
 [`200 OK`](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.1) tells the
@@ -15,7 +18,7 @@ tester your server is ready to receive requests.
 
 ### Start your firewall
 
-Your program must accept three command-line flags:
+Your starter already accepts three command-line flags:
 
 | Flag         | Value                                              |
 | ------------ | -------------------------------------------------- |
@@ -23,8 +26,9 @@ Your program must accept three command-line flags:
 | `--detector` | The URL of the prompt classifier service           |
 | `--policy`   | The path to a JSON file containing firewall policy |
 
-Accept these values without contacting either service or reading policy rules.
-Later stages will use them. You may use your language's HTTP server library.
+Leave the flag-parsing code in place. You won't use these values until later
+stages, so don't contact either service or read policy rules yet.
+You may use your language's HTTP server library.
 Your starter contains commented code for the health check. Uncomment it to get
 started, and send debug output to standard error.
 
@@ -44,7 +48,10 @@ The policy path above is an example. The tester supplies its temporary file's
 absolute path as a single argument.
 
 The tester sends `GET /health` twice. Your program must start and answer both
-requests within five seconds of launch. You can make the same request from another terminal:
+requests within five seconds of launch.
+
+To check locally, run the launch command above in one terminal and leave it
+running. Then run this command in another terminal:
 
 ```bash
 curl --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:8080/health

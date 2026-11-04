@@ -1,4 +1,4 @@
-@@ -416,95 +416,262 @@
+@@ -407,95 +407,262 @@
  	return ""
  }
 
@@ -262,7 +262,7 @@
  			return err
  		}
  		if len(chunk.Choices) == 0 {
-@@ -523,154 +690,160 @@
+@@ -514,154 +681,160 @@
  			call.Function.Arguments += fragment.Function.Arguments
  		}
  		pending += chunk.Choices[0].Delta.Content
@@ -426,14 +426,14 @@
  			w.Header().Set("X-Firewall-Score", strconv.Itoa(score))
  			if len(signals) > 0 {
  				w.Header().Set("X-Firewall-Signals", strings.Join(signals, ","))
-@@ -706,43 +879,43 @@
- 				} else if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
+@@ -693,43 +866,43 @@
+ 				if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
  					matchedRule = "heuristic_score"
  				}
  			}
  		}
  		if matchedRule != "" {
- 			if policy.Mode != "log" || detectorUnavailable {
+ 			if policy.Mode != "log" {
  				w.Header().Set("Content-Type", "application/json")
  				w.WriteHeader(http.StatusForbidden)
  				json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{

@@ -1,5 +1,5 @@
 This is a starting point for Python solutions to the
-["Build Your Own AI Firewall" Challenge](https://codecrafters.io/challenges/cloudflare).
+["Build Your Own AI Firewall" Challenge](https://codecrafters.io/challenges/firewall).
 
 You'll build a proxy for an OpenAI-compatible chat completions API that inspects
 prompts and streamed responses, checks tool calls, and enforces trusted policy

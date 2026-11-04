@@ -1,4 +1,4 @@
-@@ -225,68 +225,148 @@
+@@ -218,68 +218,148 @@
              if (target.scheme not in ("http", "https") or not target.hostname
                      or target.username is not None or target.netloc.endswith(":")
                      or (port is not None and not 1 <= port <= 65535)):
@@ -148,7 +148,7 @@
              call["function"]["arguments"] += fragment.get("function", {}).get("arguments", "")
          pending += delta.get("content") or ""
          if canary and canary in pending:
-@@ -303,50 +383,51 @@
+@@ -296,50 +376,51 @@
      parser.add_argument("--origin")
      parser.add_argument("--detector")
      parser.add_argument("--policy")
@@ -199,8 +199,8 @@
                      score_headers["X-Firewall-Signals"] = ",".join(signals)
                  if not matched_rule and "decisions" not in policy and score >= policy["heuristics"]["threshold"]:
                      matched_rule = "heuristic_score"
-             detector_unavailable = False
-@@ -387,76 +468,78 @@
+             if "classifier" in policy:
+@@ -376,76 +457,78 @@
              headers = {
                  name: self.headers[name]
                  for name in ("Authorization", "Content-Type")

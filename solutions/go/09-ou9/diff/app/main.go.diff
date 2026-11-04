@@ -17,7 +17,6 @@
  	"regexp"
  	"strconv"
  	"strings"
- 	"sync"
  	"time"
  	"unicode/utf8"
 
@@ -28,7 +27,8 @@
  type normalizationPolicy struct {
  	ZeroWidth  []string          `json:"zero_width"`
  	Homoglyphs map[string]string `json:"homoglyphs"`
-@@ -329,50 +330,107 @@
+ }
+@@ -320,50 +321,107 @@
  		return false
  	}
  	var contains func(any) bool
@@ -136,7 +136,7 @@
  	}
  	if err := json.Unmarshal(data, &policy); err != nil {
  		fmt.Fprintln(os.Stderr, err)
-@@ -394,50 +452,69 @@
+@@ -385,50 +443,69 @@
  	proxy := &httputil.ReverseProxy{
  		Rewrite: func(request *httputil.ProxyRequest) {
  			request.SetURL(target)
@@ -206,18 +206,18 @@
  		for _, rule := range policy.Denylist {
  			for _, text := range inspection {
  				if strings.Contains(text, rule.Term) {
-@@ -484,39 +561,47 @@
+@@ -471,39 +548,47 @@
+ 					}
+ 				}
+ 			} else {
  				w.Header().Set("X-Firewall-Detector-Status", "unavailable")
- 				detectorUnavailable = policy.Classifier.FailureMode == "fail_closed"
- 				if detectorUnavailable {
- 					matchedRule = "detector_unavailable"
- 				} else if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
+ 				if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
  					matchedRule = "heuristic_score"
  				}
  			}
  		}
  		if matchedRule != "" {
- 			if policy.Mode != "log" || detectorUnavailable {
+ 			if policy.Mode != "log" {
  				w.Header().Set("Content-Type", "application/json")
  				w.WriteHeader(http.StatusForbidden)
  				json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{

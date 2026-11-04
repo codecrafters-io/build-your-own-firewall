@@ -8,7 +8,7 @@ work listed here.
 
 ## Metadata and end state
 
-- Course: `cloudflare`, displayed as **Build your own AI Firewall**.
+- Course: `firewall`, displayed as **Build your own AI Firewall**.
 - Axis: capabilities added to one HTTP inspection and authorization pipeline.
 - Scope: eleven base stages, with Go and Python solutions and hints.
 - Source: [approved course design][design], HTTP and OpenAI-compatible protocol
@@ -31,7 +31,7 @@ record through the configured CRM email tool succeeds.
 | 3   | `kg7` | Block and log          | `easy`      | Apply a supplied literal denylist        | Block before origin traffic, report matched rules, forward log-mode matches               | Policy runner, origin recorder, denial checks            |
 | 4   | `wt4` | Defeat evasion         | `medium`    | Inspect normalized and once-decoded text | Catch configured disguises, respect decoding bounds, preserve forwarded bytes             | Unicode and base64 probes                                |
 | 5   | `ro3` | Score with heuristics  | `medium`    | Aggregate weighted signals               | Count signals once, apply proximity rules, report score categories and signal IDs         | Heuristic header checks                                  |
-| 6   | `xd5` | Call the classifier    | `medium`    | Consult a fallible classifier adapter    | Classify original messages in parallel, enforce the deadline, apply failure policy        | Synthetic classifier and timing checks                   |
+| 6   | `xd5` | Call the classifier    | `medium`    | Consult a fallible classifier adapter    | Classify original messages, apply a cutoff, fall back to existing rules        | Synthetic classifier and timing checks                   |
 | 7   | `si3` | Decide with thresholds | `medium`    | Combine scores within each message       | Use supplied role-sensitive thresholds, preserve score association and fallback behavior  | Decision-boundary and correlation probes                 |
 | 8   | `qe5` | Stop data leaks        | `medium`    | Protect traffic in both directions       | Redact with request-local placeholders, block outgoing canaries, preserve clean responses | DLP request and response checks                          |
 | 9   | `ou9` | Inspect streams        | `medium`    | Inspect incremental SSE content          | Catch split canaries, terminate denied streams, release safe text promptly                | Fragmented SSE origin, wire parser, latency checks       |
@@ -145,6 +145,6 @@ The current release and CI status is recorded by GitHub Actions and releases.
 Review basis: [Create a New Challenge][create], [Author a Course
 Extension][author], and [Review Course Extensions][review].
 
-[release]: https://github.com/codecrafters-io/cloudflare-tester/releases/tag/v1
+[release]: https://github.com/codecrafters-io/firewall-tester/releases/tag/v1
 [tester-ci]:
-  https://github.com/codecrafters-io/cloudflare-tester/actions/runs/41634039540
+  https://github.com/codecrafters-io/firewall-tester/actions/runs/41634039540

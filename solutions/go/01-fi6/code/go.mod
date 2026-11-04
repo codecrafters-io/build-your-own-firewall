@@ -1,4 +1,4 @@
-module github.com/codecrafters-io/cloudflare-starter-go
+module github.com/codecrafters-io/firewall-starter-go
 
 go 1.25.0
 

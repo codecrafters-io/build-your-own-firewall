@@ -1,5 +1,8 @@
 # Stage 7: Decide with thresholds
 
+Current inherited classifier behavior: sequential calls are sufficient, each call
+uses a 200 ms timeout, and failures use the fixed heuristic fallback from Stage 6.
+
 The approved course design and request to continue with stage 7 establish this
 scope. The allocated slug is `si3` and its difficulty is `medium`.
 
@@ -38,10 +41,9 @@ Successful combined decisions replace both standalone score cutoffs. This lets
 the synthetic classifier false positive pass without supporting clues and allows
 a strong heuristic total to pass when classification is low. On any classifier
 error, partial results are discarded as before. Fail-open restores the earlier
-request-wide heuristic fallback and denylist decision. Fail-closed still returns
-`detector_unavailable`, even in log mode. Block/log handling, original request
-and response bytes, classifier calls, deadline behavior, and
-uninspectable-request rejection remain as in earlier stages.
+request-wide heuristic fallback and denylist decision. Block/log handling,
+original request and response bytes, classifier calls, the per-call timeout,
+and uninspectable-request rejection remain as in earlier stages.
 
 ## Sources and limits
 
@@ -78,12 +80,11 @@ tool output, strong heuristics with low classification, and changed default and
 tool tables.
 
 Correlation cases split useful scores across messages, split weak clues across
-messages, repeat a signal in later messages, and make classifier responses
-finish in reverse order. Text-part cases permit adding distinct signals within
+messages, repeat a signal in later messages, and distinguish classifier scores
+that belong to different messages. Text-part cases permit adding distinct signals within
 one message but forbid joining proximity terms. Include encoded and normalized
 clues, null content, an empty conversation, denylist precedence, first-message
-rule selection, log-mode preservation, fail-open fallback, and fail-closed log
-behavior.
+rule selection, log-mode preservation, and the fixed fail-open fallback.
 
 Reuse the classifier mock, request multiplicity checks, SDK response capture,
 origin accounting, and existing header-category assertions. Extend comparison
@@ -94,9 +95,12 @@ language solutions through all seven platform stages, and prior solutions that
 must fail this stage. Repeat success and representative failures 100 times,
 using independent batches where useful. Manually exercise the real HTTP
 interface, regenerate SDK diffs, and verify stable regeneration and unchanged
-Stage 6 solution files.
+earlier stage behavior.
 
-## Verification results
+## Original verification results
+
+These results record the original Stage 7 implementation, before Stage 6 was
+simplified. Current classifier requirements and checks are described above.
 
 - The full tester suite passes, followed by build, vet, formatting, and the
   seven-stage release launcher. Nineteen Stage 7 golden outputs cover the

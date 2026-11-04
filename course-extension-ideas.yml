@@ -1,6 +1,6 @@
 # Merge into core's data/course_extension_ideas.yml after the course record exists.
-- slug: "cloudflare-rate-limiting"
-  course_slug: "cloudflare"
+- slug: "firewall-rate-limiting"
+  course_slug: "firewall"
   development_status: "not_started"
   name: "Rate limiting"
   description_markdown: |-

@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -161,8 +160,7 @@ func scoreHeuristics(candidates []string, settings *heuristicPolicy) (int, []str
 }
 
 type classifierPolicy struct {
-	Threshold   int    `json:"threshold"`
-	FailureMode string `json:"failure_mode"`
+	Threshold int `json:"threshold"`
 }
 
 // Keep each result associated with its message for later decision rules.
@@ -173,54 +171,47 @@ func classifyMessages(ctx context.Context, endpoint string, body []byte) ([]int,
 	if json.Unmarshal(body, &request) != nil {
 		return nil, false
 	}
-	scores := make([]int, len(request.Messages))
-	failures := make([]bool, len(request.Messages))
 	client := &http.Client{
 		Transport:     &http.Transport{},
 		Timeout:       200 * time.Millisecond,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	defer client.CloseIdleConnections()
-	var workers sync.WaitGroup
+	scores := make([]int, len(request.Messages))
+	available := true
 	for index, message := range request.Messages {
-		workers.Add(1)
-		go func(index int, message json.RawMessage) {
-			defer workers.Done()
-			failures[index] = true
-			outgoing, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(endpoint, "/")+"/classify", bytes.NewReader(message))
-			if err != nil {
-				return
-			}
-			outgoing.Header.Set("Content-Type", "application/json")
-			response, err := client.Do(outgoing)
-			if err != nil {
-				return
-			}
-			defer response.Body.Close()
-			if response.StatusCode != http.StatusOK {
-				return
-			}
-			data, err := io.ReadAll(response.Body)
-			if err != nil {
-				return
-			}
-			var result struct {
-				Score *int `json:"score"`
-			}
-			if json.Unmarshal(data, &result) != nil || result.Score == nil || *result.Score < 0 || *result.Score > 100 {
-				return
-			}
-			scores[index] = *result.Score
-			failures[index] = false
-		}(index, message)
+		score, ok := classifyMessage(ctx, client, endpoint, message)
+		scores[index] = score
+		available = available && ok
 	}
-	workers.Wait()
-	for _, failed := range failures {
-		if failed {
-			return nil, false
-		}
+	return scores, available
+}
+
+func classifyMessage(ctx context.Context, client *http.Client, endpoint string, message json.RawMessage) (int, bool) {
+	outgoing, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(endpoint, "/")+"/classify", bytes.NewReader(message))
+	if err != nil {
+		return 0, false
 	}
-	return scores, true
+	outgoing.Header.Set("Content-Type", "application/json")
+	response, err := client.Do(outgoing)
+	if err != nil {
+		return 0, false
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return 0, false
+	}
+	data, err := io.ReadAll(response.Body)
+	if err != nil {
+		return 0, false
+	}
+	var result struct {
+		Score *int `json:"score"`
+	}
+	if json.Unmarshal(data, &result) != nil || result.Score == nil || *result.Score < 0 || *result.Score > 100 {
+		return 0, false
+	}
+	return *result.Score, true
 }
 
 type scoreThresholds struct {
@@ -538,7 +529,6 @@ func main() {
 				matchedRule = "heuristic_score"
 			}
 		}
-		detectorUnavailable := false
 		if policy.Classifier != nil {
 			scores, available := classifyMessages(r.Context(), *detector, body)
 			if available {
@@ -559,16 +549,13 @@ func main() {
 				}
 			} else {
 				w.Header().Set("X-Firewall-Detector-Status", "unavailable")
-				detectorUnavailable = policy.Classifier.FailureMode == "fail_closed"
-				if detectorUnavailable {
-					matchedRule = "detector_unavailable"
-				} else if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
+				if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
 					matchedRule = "heuristic_score"
 				}
 			}
 		}
 		if matchedRule != "" {
-			if policy.Mode != "log" || detectorUnavailable {
+			if policy.Mode != "log" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
 				json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{

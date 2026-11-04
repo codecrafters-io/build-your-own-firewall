@@ -4,9 +4,9 @@ thresholds, with stricter rules for messages returned by tools.
 ### Why separate detection from decisions?
 
 `Explain how prompt injection detectors work.` is a benign question, but the
-synthetic classifier gives it a score of `78`. A single cutoff blocks it. The
-heuristics fire no signal, so requiring agreement for moderately suspicious
-messages can let this question through.
+synthetic classifier gives it a score of `78`. Stage 6's single cutoff blocks
+it. The heuristics fire no signal, so requiring agreement for moderately
+suspicious messages can let this question through.
 
 Cloudflare's [injection rules][cloudflare] also combine detection scores with
 other fields. Here, you'll make the decision using two scores from the same
@@ -19,7 +19,9 @@ You'll use lower thresholds for messages whose API role is `tool`.
 
 ### Read the decision thresholds
 
-Keep the existing policy fields and add:
+Add this top-level `decisions` field to Stage 6's policy. Keep `mode`,
+`denylist`, `normalization`, `heuristics`, and `classifier` alongside it; this
+snippet shows only the new field. Use `"mode": "block"` for the worked example:
 
 ```json
 {
@@ -59,11 +61,16 @@ independently to another message.
 
 Different signals in one message's text parts can add together. A proximity
 signal still cannot join terms across text parts or inspection variants. Null or
-absent content contributes no heuristic signals.
+absent content contributes no heuristic signals. Keep an entry for such a
+message with heuristic score `0`; it still has its own classifier result and
+must not shift the indices of later messages.
 
-Pair that score with the classifier result for the same original message. The
-parallel calls may finish in a different order, so retain their original array
-indices. Don't pair request-wide maxima or borrow evidence from another message.
+Pair that score with the classifier result for the same original message. Keep results in the same order as the original messages. Don't pair request-wide maxima or borrow evidence from another message.
+
+For example, suppose one user message has heuristic score `3` and classifier
+score `10`, while another has heuristic score `0` and classifier score `65`.
+Neither message meets both medium cutoffs, so this pair does not trigger a
+combined rule, even though the request-wide summaries are `3` and `65`.
 
 Evaluate messages in conversation order. For each message:
 
@@ -76,6 +83,10 @@ Evaluate messages in conversation order. For each message:
 
 Use the first matching message's rule. If no message matches, forward normally.
 Denylist matches retain precedence over these threshold rules.
+
+If an earlier message matches `combined_scores` and a later message matches
+`classifier_high`, select `combined_scores`. The high-score check takes priority
+only within the message currently being evaluated.
 
 With the supplied thresholds, the following decisions result:
 
@@ -98,11 +109,12 @@ Block mode returns HTTP `403` with the selected rule and never contacts the
 origin. Log mode forwards the original request and reports the selected rule in
 `X-Firewall-Match`. Clear that header on later unmatched requests.
 
-Keep the earlier classifier deadline and failure modes. A classifier failure
-discards partial classifier results. Fail-open uses the denylist and the
-request-wide heuristic cutoff alone. Fail-closed returns `detector_unavailable`,
-including in log mode. Requests that cannot be inspected still return HTTP `400`
-before contacting either service.
+Keep Stage 6's per-call timeout, response validation, and fixed fail-open
+fallback. If classification fails, discard classifier scores and use the
+denylist and request-wide `heuristics.threshold` alone, with the existing
+block/log behavior. The role-specific medium thresholds do not apply to this
+fallback. Requests that cannot be inspected still return HTTP `400` before
+contacting either service.
 
 Keep the existing diagnostic headers: `X-Firewall-Score` is the request-wide
 heuristic total with each signal counted once across the request,
@@ -110,6 +122,12 @@ heuristic total with each signal counted once across the request,
 the highest classifier score. These summaries are useful diagnostics, but the
 new successful-classification decision must use each message's paired scores.
 Don't change classifier message bodies or forwarded request bytes.
+
+For example, two messages containing `[system]` each have heuristic score `3`,
+but `X-Firewall-Score` is still `3`, because `role-token` contributes once across
+the request. Don't sum the per-message scores to produce that header. An empty
+conversation has no matching message and retains Stage 6's score `0` and `ok`
+detector status.
 
 ### Tests
 
@@ -120,44 +138,40 @@ mock services, and runs your program like this:
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/example/policy.json
 ```
 
-Both service ports are random. The official Go SDK first sends the equivalent
-of:
+Both service ports are random, and the policy path is temporary. The launch
+command starts only your firewall; the tester supplies the mock services during
+tests. For a manual check, save the expanded policy to a file, use its absolute
+path for `--policy`, and run compatible origin and classifier services at the
+supplied URLs. Leave your firewall running and send this equivalent of the
+tester's first SDK request from another terminal:
 
 ```bash
-curl --silent -i http://127.0.0.1:8080/v1/chat/completions \
+curl --silent --include http://127.0.0.1:8080/v1/chat/completions \
   -H 'Authorization: Bearer course-test-key' \
   -H 'Content-Type: application/json' \
   -d '{"model":"course-model","messages":[{"role":"user","content":"Explain how prompt injection detectors work."}]}'
 ```
 
-The synthetic classifier returns `78`, and no heuristic signal fires. Return
-HTTP `200` and relay the mock origin's response unchanged:
+For this case, the tester's synthetic classifier returns `{"score":78}`, and
+no heuristic signal fires. To reproduce it manually, configure your classifier
+to return that score. Return HTTP `200` and relay this raw mock-origin response
+body byte-for-byte:
 
-```json
-{
-  "id": "chatcmpl-policy",
-  "object": "chat.completion",
-  "created": 1700000000,
-  "model": "course-model",
-  "choices": [
-    {
-      "index": 0,
-      "message": { "role": "assistant", "content": "Policy allowed." },
-      "finish_reason": "stop"
-    }
-  ],
-  "course_marker": "keep-this"
-}
+```text
+{"id":"chatcmpl-policy","object":"chat.completion","created":1700000000,"model":"course-model","choices":[{"index":0,"message":{"role":"assistant","content":"Policy allowed."},"finish_reason":"stop"}],"course_marker":"keep-this"}
 ```
 
 Keep the origin's `Content-Type: application/json` and
-`X-Request-Id: req-policy`. Report successful classifier diagnostics and no
-`X-Firewall-Match` header. The tester then checks an attack where both detectors
-agree and the user/tool pair shown above. Blocked responses must use the
-existing JSON error envelope with rule `combined_scores` or `classifier_high`.
+`X-Request-Id: req-policy`. Report `X-Firewall-Score: 0`,
+`X-Firewall-Detector-Status: ok`, and `X-Firewall-Classifier-Score: 78`, with no
+`X-Firewall-Match` header. The `--include` option shows these headers alongside
+the body. A different origin may return a different response; relay what it
+returns. The tester then checks an attack where both detectors agree and the
+user/tool pair shown above. Blocked responses must use the existing JSON error
+envelope with rule `combined_scores` or `classifier_high`.
 
 Other checks cover inclusive boundaries, scores from different messages,
-classifier calls finishing out of order, repeated signals, text parts,
+classifier scores paired with their original messages, repeated signals, text parts,
 normalized and encoded clues, null content, denylist precedence, log mode,
 classifier failures, and changed threshold tables. Decisions and score
 categories are checked rather than exact score totals. Each API request has a

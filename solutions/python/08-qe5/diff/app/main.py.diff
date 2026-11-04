@@ -1,8 +1,6 @@
 @@ -1,25 +1,26 @@
 +import re
  import argparse
- from concurrent.futures import ThreadPoolExecutor, wait
- import time
  import base64
  import binascii
  import unicodedata
@@ -25,15 +23,17 @@
 
      candidates = [normalize(text)]
      try:
-@@ -112,60 +113,116 @@
-         if pending:
-             return None
-         return [future.result() for future in futures]
-     except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException):
-         return None
-     finally:
-         # A late result must not delay or change this request's decision.
-         workers.shutdown(wait=False, cancel_futures=True)
+         decoded = base64.b64decode(text, validate=True)
+         candidates.append(normalize(decoded.decode("utf-8")))
+@@ -105,60 +106,116 @@
+     scores = []
+     available = True
+     for message in messages:
+         try:
+             scores.append(classify(message))
+         except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException):
+             available = False
+     return scores if available else None
 
 
  def decision_rule(messages, scores, settings, heuristics, normalization):
@@ -142,14 +142,14 @@
              matched_rule = next(
                  (
                      rule["id"]
-@@ -202,60 +259,73 @@
+@@ -191,60 +248,73 @@
                      if not matched_rule:
                          if "decisions" in policy:
                              matched_rule = decision_rule(messages, scores, policy["decisions"],
                                                           policy.get("heuristics"), policy.get("normalization"))
                          elif highest >= policy["classifier"]["threshold"]:
                              matched_rule = "classifier_score"
-             if matched_rule and (policy.get("mode", "block") != "log" or detector_unavailable):
+             if matched_rule and policy.get("mode", "block") != "log":
                  data = json.dumps({"error": {
                      "message": "Blocked by firewall policy",
                      "type": "firewall_block",

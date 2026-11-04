@@ -1,4 +1,4 @@
-@@ -32,86 +32,95 @@
+@@ -31,86 +31,95 @@
  		return []string{text}
  	}
  	normalize := func(value string) string {
@@ -101,30 +101,30 @@
  				found = append(found, start)
  			}
  		}
-@@ -190,147 +199,193 @@
- 				return
- 			}
- 			data, err := io.ReadAll(response.Body)
- 			if err != nil {
- 				return
- 			}
- 			var result struct {
- 				Score *int `json:"score"`
- 			}
- 			if json.Unmarshal(data, &result) != nil || result.Score == nil || *result.Score < 0 || *result.Score > 100 {
- 				return
- 			}
- 			scores[index] = *result.Score
- 			failures[index] = false
- 		}(index, message)
+@@ -181,143 +190,190 @@
+ 	if err != nil {
+ 		return 0, false
  	}
- 	workers.Wait()
- 	for _, failed := range failures {
- 		if failed {
- 			return nil, false
- 		}
+ 	outgoing.Header.Set("Content-Type", "application/json")
+ 	response, err := client.Do(outgoing)
+ 	if err != nil {
+ 		return 0, false
  	}
- 	return scores, true
+ 	defer response.Body.Close()
+ 	if response.StatusCode != http.StatusOK {
+ 		return 0, false
+ 	}
+ 	data, err := io.ReadAll(response.Body)
+ 	if err != nil {
+ 		return 0, false
+ 	}
+ 	var result struct {
+ 		Score *int `json:"score"`
+ 	}
+ 	if json.Unmarshal(data, &result) != nil || result.Score == nil || *result.Score < 0 || *result.Score > 100 {
+ 		return 0, false
+ 	}
+ 	return *result.Score, true
  }
 
 +type scoreThresholds struct {
@@ -248,7 +248,6 @@
  				matchedRule = "heuristic_score"
  			}
  		}
- 		detectorUnavailable := false
  		if policy.Classifier != nil {
  			scores, available := classifyMessages(r.Context(), *detector, body)
  			if available {
@@ -271,16 +270,13 @@
  				}
  			} else {
  				w.Header().Set("X-Firewall-Detector-Status", "unavailable")
- 				detectorUnavailable = policy.Classifier.FailureMode == "fail_closed"
- 				if detectorUnavailable {
- 					matchedRule = "detector_unavailable"
-+				} else if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
++				if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
 +					matchedRule = "heuristic_score"
- 				}
++				}
  			}
  		}
  		if matchedRule != "" {
- 			if policy.Mode != "log" || detectorUnavailable {
+ 			if policy.Mode != "log" {
  				w.Header().Set("Content-Type", "application/json")
  				w.WriteHeader(http.StatusForbidden)
  				json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{
@@ -301,3 +297,4 @@
  		w.WriteHeader(http.StatusOK)
  	})
  	if err := http.ListenAndServe(":8080", nil); err != nil {
+ 		fmt.Fprintln(os.Stderr, err)

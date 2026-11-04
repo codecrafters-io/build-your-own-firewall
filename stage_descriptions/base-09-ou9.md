@@ -3,9 +3,15 @@ canary split across chunks never reaches the client.
 
 ### Inspect text as it arrives
 
+Stage 8 buffers the complete origin response before checking it. For streaming
+completions, clients should receive safe text while the origin is still
+generating the rest. You'll replace full-response buffering with a small window
+of pending text for this path.
+
 An origin can answer a chat completion incrementally when the request includes
 `"stream": true`. It sends [server-sent events][sse] (SSE), with content type
-`text/event-stream`. A blank line ends each event:
+`text/event-stream`. Each `data:` line carries an event payload, and a blank
+line ends the event:
 
 ```text
 data: {"choices":[{"index":0,"delta":{"content":"Hi."}}]}
@@ -17,12 +23,19 @@ data: [DONE]
 The JSON payload is a chat completion chunk. Its `delta.content` contains new
 text, and `[DONE]` is the final marker. Network reads do not correspond to
 events: one read might contain several events or only part of a UTF-8 character.
-Read complete event lines before decoding their JSON.
+Read complete event lines before decoding their JSON. The fixtures use one
+`data:` line per event and may use either LF (`\n`) or CRLF (`\r\n`) line
+endings.
 
 Keep the earlier input checks and redaction. For a streaming request whose
 origin returns HTTP `200` and `text/event-stream`, inspect decoded text deltas
 incrementally using the existing `dlp.canary`. Non-streaming responses and
 origin JSON errors keep the behavior from earlier stages.
+
+No new policy field is needed. Keep Stage 8's `dlp` settings and apply this
+stream inspection when `dlp` is enabled. Preserve `stream: true` when forwarding
+the redacted request. Choose the incremental response path before reading the
+whole origin body, or the client will still have to wait for the entire answer.
 
 ### Hold enough text to detect a split canary
 
@@ -45,6 +58,10 @@ Do the search **before** releasing anything. The retained suffix can contain an
 incomplete marker, and the next delta might complete it. For a one-character
 canary, retain zero characters after each successful check. Start with an empty
 buffer for every response.
+
+This suffix length is enough because an incomplete canary can contain at most
+`L - 1` characters. It also delays some harmless text; release the safe prefix
+as soon as it exceeds that window, rather than waiting for another event.
 
 When a clean origin sends `[DONE]`, release the remaining pending text, send one
 `data: [DONE]` event, and close the response. Partial markers at the end of a
@@ -81,8 +98,12 @@ data: {"error":{"message":"Blocked outgoing canary","type":"firewall_block","rul
 
 Use a nonempty message without origin content. Send no more text, errors, or
 `[DONE]` after it. The HTTP status remains `200` because streaming has started.
+Use this SSE error even if the canary is found before any text is released.
+Stage 8's HTTP `403` canary response still applies to the buffered non-streaming
+path. Earlier input denials also keep their existing HTTP statuses.
 The official SDK reports the error while iterating the stream. Safe text already
-released stays with the client, and pending text is discarded.
+released stays with the client, and pending text is discarded. Stop consuming
+and close the origin response when you end the stream.
 
 ### Tests
 
@@ -93,10 +114,28 @@ and runs:
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/example/policy.json
 ```
 
-Both service ports are allocated dynamically. The official OpenAI Go SDK sends
-`stream: true`, a system message containing the canary, and a user message
-containing a dummy email. The origin must see the redacted email and the
-unchanged streaming setting.
+Service URLs and the policy path are supplied by the tester. The launch command
+starts only your firewall; the mock services run during tests. For a manual
+check, save your policy to a file, use its absolute path for `--policy`, and run
+an origin that serves SSE at the supplied `--origin` URL. If your policy enables
+classification, run that service at `--detector` too and use scores that allow
+the request through the input checks.
+
+Leave your firewall running and send this equivalent of the tester's first SDK
+request from another terminal:
+
+```bash
+curl --silent --no-buffer --include http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Authorization: Bearer course-test-key' \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"course-model","stream":true,"messages":[{"role":"system","content":"Keep CANARY_COURSE_7F2A private."},{"role":"user","content":"Say hello to ana@example.com."}]}'
+```
+
+The `--no-buffer` option lets curl display events as they arrive, and `--include`
+shows the status and headers. The origin must see the redacted email,
+`[REDACTED_1]`, and the unchanged streaming setting. To reproduce the first case
+manually, configure the origin to send the following events with
+`Content-Type: text/event-stream`.
 
 The first synthetic stream splits `CANARY_COURSE_7F2A` across five events:
 
@@ -132,9 +171,11 @@ deltas, so output chunk boundaries may differ.
 For latency, the mock uses the two-character canary `猫🔐`. It sends `ééé`
 immediately, waits two seconds, then sends ` clean` and `[DONE]`. The client
 must receive its first nonempty text delta within one second and eventually
-receive `ééé clean`. Headers or empty events do not count as text. A failure
-reports the measured wait. Each request has a five-second overall budget, and
-all earlier behavior must continue to pass.
+receive `ééé clean`. Here `L` is `2`: retain one character and release `éé`
+immediately from the first delta. The last `é` stays pending until more text or
+`[DONE]` arrives. Headers or empty events do not count as text. A failure reports
+the measured wait. Each request has a five-second overall budget, and all
+earlier behavior must continue to pass.
 
 ### Notes
 

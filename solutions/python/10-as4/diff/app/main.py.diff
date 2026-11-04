@@ -2,8 +2,6 @@
 +import urllib.parse
  import re
  import argparse
- from concurrent.futures import ThreadPoolExecutor, wait
- import time
  import base64
  import binascii
  import unicodedata
@@ -25,7 +23,9 @@
          return "".join(settings["homoglyphs"].get(character, character) for character in value)
 
      candidates = [normalize(text)]
-@@ -169,73 +170,148 @@
+     try:
+         decoded = base64.b64decode(text, validate=True)
+@@ -162,73 +163,148 @@
              for part in content:
                  part["text"] = redact(part["text"])
      return json.dumps(request).encode() if changed else body
@@ -178,7 +178,7 @@
          def do_GET(self):
              self.send_response(200 if self.path == "/health" else 404)
              self.end_headers()
-@@ -311,74 +387,79 @@
+@@ -300,74 +376,79 @@
              headers = {
                  name: self.headers[name]
                  for name in ("Authorization", "Content-Type")

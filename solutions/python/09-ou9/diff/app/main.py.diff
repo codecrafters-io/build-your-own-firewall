@@ -1,4 +1,4 @@
-@@ -168,50 +168,82 @@
+@@ -161,50 +161,82 @@
          elif isinstance(content, list):
              for part in content:
                  part["text"] = redact(part["text"])
@@ -81,12 +81,12 @@
              body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
              messages = inspect_messages(body)
              if messages is None:
-@@ -261,67 +293,88 @@
+@@ -250,67 +282,88 @@
                              matched_rule = decision_rule(messages, scores, policy["decisions"],
                                                           policy.get("heuristics"), policy.get("normalization"))
                          elif highest >= policy["classifier"]["threshold"]:
                              matched_rule = "classifier_score"
-             if matched_rule and (policy.get("mode", "block") != "log" or detector_unavailable):
+             if matched_rule and policy.get("mode", "block") != "log":
                  data = json.dumps({"error": {
                      "message": "Blocked by firewall policy",
                      "type": "firewall_block",

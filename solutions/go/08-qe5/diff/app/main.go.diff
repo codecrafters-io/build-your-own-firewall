@@ -16,7 +16,6 @@
 +	"regexp"
  	"strconv"
  	"strings"
- 	"sync"
  	"time"
  	"unicode/utf8"
 
@@ -39,7 +38,8 @@
  		}
  		value = cases.Fold().String(norm.NFKC.String(value))
  		var result strings.Builder
-@@ -234,87 +235,209 @@
+ 		for _, character := range value {
+@@ -225,87 +226,209 @@
 
  func decisionRule(messages []inspectedMessage, scores []int, settings *decisionPolicy, heuristics *heuristicPolicy, normalization *normalizationPolicy) string {
  	for index, message := range messages {
@@ -249,23 +249,23 @@
  		for _, rule := range policy.Denylist {
  			for _, text := range inspection {
  				if strings.Contains(text, rule.Term) {
-@@ -356,40 +479,44 @@
+@@ -343,40 +466,44 @@
+ 				if matchedRule == "" {
+ 					if policy.Decisions != nil {
+ 						matchedRule = decisionRule(messages, scores, policy.Decisions, policy.Heuristics, policy.Normalization)
  					} else if highest >= policy.Classifier.Threshold {
  						matchedRule = "classifier_score"
  					}
  				}
  			} else {
  				w.Header().Set("X-Firewall-Detector-Status", "unavailable")
- 				detectorUnavailable = policy.Classifier.FailureMode == "fail_closed"
- 				if detectorUnavailable {
- 					matchedRule = "detector_unavailable"
- 				} else if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
+ 				if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
  					matchedRule = "heuristic_score"
  				}
  			}
  		}
  		if matchedRule != "" {
- 			if policy.Mode != "log" || detectorUnavailable {
+ 			if policy.Mode != "log" {
  				w.Header().Set("Content-Type", "application/json")
  				w.WriteHeader(http.StatusForbidden)
  				json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{

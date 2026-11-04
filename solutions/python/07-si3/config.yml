@@ -11,5 +11,5 @@ hints:
       Use settings["tool"] only when role == "tool", otherwise settings["default"].
       Check the high classifier cutoff first, then require both medium conditions
       with and. Return the first matching message's rule. Apply these decisions
-      only after all classifier calls succeed. Keep the earlier fail-open fallback,
-      fail-closed rejection, and block/log response handling.
+      only after all classifier calls succeed. Keep the fixed fail-open fallback
+      and block/log response handling.

@@ -8,4 +8,4 @@
 
 set -e # Exit on failure
 
-go build -o /tmp/codecrafters-build-cloudflare-go app/*.go
+go build -o /tmp/codecrafters-build-firewall-go app/*.go

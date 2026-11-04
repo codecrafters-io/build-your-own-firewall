@@ -3,8 +3,9 @@ responses that contain a canary token from the system prompt.
 
 ### Protect data in both directions
 
-An allowed prompt can still expose private data to the model provider. Data loss
-prevention (DLP) inspects data crossing that boundary. Cloudflare's [DLP
+Stage 7 decides whether a request can reach the model, but an allowed prompt can
+still expose private data to the model provider. Data loss prevention (DLP)
+inspects data crossing that boundary. Cloudflare's [DLP
 feature][cloudflare] scans incoming prompts and outgoing responses. Here, you'll
 implement two small mechanisms: replacing supplied sensitive patterns on the way
 to the origin, and detecting a fixed marker on the way back.
@@ -16,7 +17,8 @@ Your firewall does not add or rewrite system instructions to plant the token.
 
 ### Read the DLP policy
 
-Keep the earlier policy fields and support this optional object:
+Add this optional top-level `dlp` field to Stage 7's policy. The snippet shows
+only the addition; keep the earlier policy fields alongside it:
 
 ```json
 {
@@ -44,12 +46,21 @@ receives original message objects. Redaction protects the subsequent origin
 request. A request blocked by an earlier input rule still never reaches the
 origin.
 
+Here, "original" means before redaction: keep using normalized inspection
+candidates for denylist and heuristic matching, and original message objects
+for classification. After those checks allow forwarding, redact the origin
+request, send it, then inspect the origin response before releasing it.
+
 ### Replace sensitive values with placeholders
 
 For an allowed or logged request, traverse `messages` in array order. Inspect
 each message's string `content`, or each text part's `text` in array order.
 Include all message roles. Null or absent content has nothing to redact. Match
 the original, JSON-decoded text, without normalization or base64 decoding.
+
+Finding a sensitive value changes the forwarded content rather than rejecting
+the request. Each placeholder stands in for the matched value so the origin can
+receive the rest of the conversation without that value.
 
 Within each text string:
 
@@ -71,6 +82,10 @@ Start a fresh value map and counter for every request. For example:
 | `sk-abcdefgh ana@example.com`        | `[REDACTED_2] [REDACTED_1]` |
 | `sk-ijklmnop`                        | `[REDACTED_3]`              |
 
+Pattern order breaks ties even when a later pattern could match more text. For
+example, with patterns `TOKEN-[0-9]+` followed by `TOKEN-[0-9]+-tail`, the text
+`TOKEN-12-tail TOKEN-12` becomes `[REDACTED_1]-tail [REDACTED_1]`.
+
 Replace only message content text. Preserve model settings, roles, tool IDs,
 tool call arguments, unknown fields, and other JSON values. When redaction
 changes content, JSON whitespace and key ordering may change. When nothing
@@ -90,6 +105,9 @@ as a literal substring of the raw body and, for a valid JSON body, inside every
 JSON-decoded string value recursively. Scan all choices and nested fields,
 including origin error responses. Do not join separate string values. For
 example, `"\u0043ANARY_COURSE_7F2A"` contains the marker after JSON decoding.
+
+Use the canary exactly as supplied, without normalization or base64 decoding.
+If the body isn't valid JSON, the raw-body check still applies.
 
 If the marker appears, discard the entire origin response and return HTTP `403`
 with `Content-Type: application/json` and the earlier error format:
@@ -121,11 +139,18 @@ The tester writes `policy.json`, starts local mock services, and runs:
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/example/policy.json
 ```
 
-Both service ports are allocated dynamically. Its first request has these
-messages, with ordinary model settings and metadata alongside them:
+Both service ports are allocated dynamically, and the policy path is temporary.
+The launch command starts only your firewall; the tester supplies its mock
+services during tests. For a manual check, save the expanded policy to a file,
+use its absolute path for `--policy`, and run an origin at `--origin`. If your
+policy includes `classifier`, run that service at `--detector` too and supply
+scores that allow these messages through the input checks.
+
+Leave your firewall running and send this request from another terminal. It
+shows the messages in the tester's first case:
 
 ```bash
-curl --silent -i http://127.0.0.1:8080/v1/chat/completions \
+curl --silent --include http://127.0.0.1:8080/v1/chat/completions \
   -H 'Authorization: Bearer course-test-key' \
   -H 'Content-Type: application/json' \
   -d '{"model":"course-model","messages":[{"role":"system","content":"Keep CANARY_COURSE_7F2A private."},{"role":"user","content":"Email ana@example.com with sk-abcdefgh."}]}'
@@ -141,30 +166,19 @@ The origin must receive the same request with these message values:
 ```
 
 The mock returns HTTP `200`, `Content-Type: application/json`, and
-`X-Request-Id: req-policy`. Relay these headers and this response body
-unchanged:
+`X-Request-Id: req-policy`. Relay these headers and this raw response body
+byte-for-byte:
 
-```json
-{
-  "id": "chatcmpl-policy",
-  "object": "chat.completion",
-  "created": 1700000000,
-  "model": "course-model",
-  "choices": [
-    {
-      "index": 0,
-      "message": { "role": "assistant", "content": "Policy allowed." },
-      "finish_reason": "stop"
-    }
-  ],
-  "course_marker": "keep-this"
-}
+```text
+{"id":"chatcmpl-policy","object":"chat.completion","created":1700000000,"model":"course-model","choices":[{"index":0,"message":{"role":"assistant","content":"Policy allowed."},"finish_reason":"stop"}],"course_marker":"keep-this"}
 ```
 
-The displayed JSON is formatted for readability. Preserve the mock's original
-body bytes on the wire. A later scripted completion echoes the system message.
-That response must produce the HTTP `403` error shown above, with rule
-`canary_leak`, and release no origin body bytes.
+The `--include` option shows the status and headers alongside the body. A manual
+origin may return different content; relay its response unchanged if it passes
+the canary check. A later scripted completion echoes the system message. That
+response must produce the HTTP `403` error shown above, with rule `canary_leak`,
+and release no origin body bytes. To check this denial manually, configure your
+origin to return a response containing `CANARY_COURSE_7F2A`.
 
 Other checks cover repeated values across messages and text parts, fresh maps,
 JSON escapes, preserved metadata, changed patterns and overlap order, canaries

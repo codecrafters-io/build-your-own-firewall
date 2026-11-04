@@ -3,6 +3,9 @@ In this stage, you'll implement a proxy for the chat completions API.
 ### Why proxy the API?
 
 A proxy receives a request, sends it to another server, and relays the response.
+The server it forwards requests to is called the origin. In this course, the
+origin represents the language model API.
+
 Your firewall will use this position to inspect traffic in later stages. First,
 it needs to let an existing client communicate with the model through it.
 
@@ -19,9 +22,16 @@ origin of `http://127.0.0.1:8081` receives the request at
 
 Forward the JSON body unchanged, along with the `Authorization` and
 `Content-Type` request headers. Set the forwarded `Host` header to the origin's
-host and port. Relay the origin's status, body, `Content-Type`, and
-`X-Request-Id` response header. You don't need to understand the JSON yet. Treat
-conversation history and optional fields as data to pass through.
+host and port. For an origin of `http://127.0.0.1:8081`, send
+`Host: 127.0.0.1:8081`.
+
+Relay the origin's status, body, `Content-Type`, and `X-Request-Id` response
+header. The request ID lets the client identify the request in the origin's
+logs.
+
+Forward request and response bodies byte-for-byte, preserving whitespace,
+escaping, and extra fields. You don't need to parse or re-encode JSON in this
+stage. Treat conversation history and optional fields as data to pass through.
 
 An HTTP error from the origin is still a response to relay. If the origin
 returns `400`, preserve that status and its body. If the connection to the
@@ -41,7 +51,11 @@ The port in the origin URL is random, and the policy path is temporary. Your
 firewall still listens on port `8080` and responds to `GET /health`.
 
 The tester uses the official Go SDK. This equivalent request shows the first
-case without needing an SDK installation:
+case without needing an SDK installation. To run it manually, your firewall
+must be running on port `8080`, and an origin that serves
+`POST /v1/chat/completions` must be running at the URL supplied by `--origin`.
+The tester starts its mock origin only during tests; the launch command above
+starts only your firewall. If no origin is listening, expect HTTP `502`.
 
 ```bash
 curl --silent http://127.0.0.1:8080/v1/chat/completions \
@@ -50,8 +64,9 @@ curl --silent http://127.0.0.1:8080/v1/chat/completions \
   -d '{"model":"course-model","messages":[{"role":"user","content":"Say hello."}]}'
 ```
 
-The mock origin returns this raw JSON response body, which your firewall must
-relay unchanged:
+For this case, the tester's mock origin returns the following raw JSON response
+body, which your firewall must relay unchanged. A different origin may return a
+different response:
 
 ```text
 {"id":"chatcmpl-course-1","object":"chat.completion","created":1700000000,"model":"course-model","choices":[{"index":0,"message":{"role":"assistant","content":"Hello."},"finish_reason":"stop"}]}

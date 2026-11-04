@@ -18,7 +18,6 @@
 +	"sort"
  	"strconv"
  	"strings"
- 	"sync"
  	"time"
  	"unicode/utf8"
 
@@ -41,7 +40,8 @@
  		}
  		value = cases.Fold().String(norm.NFKC.String(value))
  		var result strings.Builder
-@@ -330,186 +331,326 @@
+ 		for _, character := range value {
+@@ -321,186 +322,326 @@
  		return false
  	}
  	var contains func(any) bool
@@ -383,14 +383,14 @@
  			for _, text := range message.Texts {
  				inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
  			}
-@@ -565,43 +706,43 @@
- 				} else if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
+@@ -552,43 +693,43 @@
+ 				if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
  					matchedRule = "heuristic_score"
  				}
  			}
  		}
  		if matchedRule != "" {
- 			if policy.Mode != "log" || detectorUnavailable {
+ 			if policy.Mode != "log" {
  				w.Header().Set("Content-Type", "application/json")
  				w.WriteHeader(http.StatusForbidden)
  				json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{
