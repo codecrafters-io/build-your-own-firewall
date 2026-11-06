@@ -1,22 +1,7 @@
 hints:
-  - title_markdown: "How do I read and send events incrementally?"
-    body_markdown: |-
-      Branch before response.read() for a successful streaming response. Iterate
-      its byte lines instead, extracting each data: payload and decoding its JSON.
-      Send text/event-stream headers without a fixed Content-Length. Write each
-      generated data event followed by two newlines, and call self.wfile.flush()
-      after each event. Leave JSON error responses on the earlier buffered path.
-  - title_markdown: "How do I keep a canary split across events private?"
-    body_markdown: |-
-      Keep a fresh pending string and keep = len(canary) - 1 for every response.
-      Append decoded content, then check canary in pending. Only after that check
-      may you emit pending[:len(pending) - keep] and retain the rest. Python string
-      indices count characters, so don't size this window using encoded bytes.
-      Use len(pending) - keep instead of a negative index so keep == 0 works too.
-  - title_markdown: "What ends a clean or blocked stream?"
-    body_markdown: |-
-      On [DONE], emit any pending text and then one [DONE] event. On a canary match,
-      discard pending text and send one JSON error event naming canary_leak, then
-      return immediately. Do not emit a success terminator or any further origin
-      content. Log mode keeps this output check active. Empty and role-only deltas
-      add no text and must not reset pending state.
+  - title_markdown: How do I update rate counters safely?
+    body_markdown:
+      Keep shared buckets outside the handler class and protect the entire
+      decision with threading.Lock. Use self.client_address[0] and
+      time.monotonic(). Store the window start and admitted-attempt count.
+      Compute Retry-After with math.ceil on the remaining duration.

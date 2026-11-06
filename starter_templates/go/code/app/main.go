@@ -12,8 +12,8 @@ var _ = http.ListenAndServe
 
 // Usage: your_program.sh --origin <url> --detector <url> --policy <path>
 func main() {
-	flag.String("origin", "", "Origin chat completions API URL")
-	flag.String("detector", "", "Classifier service URL")
+	flag.String("origin", "", "Origin web application URL")
+	flag.String("detector", "", "ML detector URL")
 	flag.String("policy", "", "Policy JSON file path")
 	flag.Parse()
 

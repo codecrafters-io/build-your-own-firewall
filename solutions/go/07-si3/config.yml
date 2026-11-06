@@ -1,16 +1,8 @@
 hints:
-  - title_markdown: "How do I keep each heuristic score with its message?"
-    body_markdown: |-
-      Stage 5 already keeps each message's role, texts, heuristic score, and
-      signal IDs. Reuse those entries with the classifier score at the same
-      index. Keep null-content entries too. Request-wide diagnostic scores
-      still summarize the union; they do not supply a message's paired score.
-  - title_markdown:
-      "Where should the new decision rules replace the old cutoffs?"
-    body_markdown: |-
-      After every classifier call succeeds, walk messages in order. Select the
-      default or tool thresholds from the structured role. Check classifier_high
-      first, then use && for both medium comparisons. Use >= for every boundary.
-      With decisions enabled, skip the old standalone cutoffs on success. On
-      fail-open, keep the request-wide heuristic fallback. An absent decisions
-      object must retain earlier behavior.
+  - title_markdown: Where do the combined decisions replace earlier cutoffs?
+    body_markdown:
+      Keep the literal-match result separate from heuristic and ML cutoff
+      matches. If classification succeeds and decisions is configured, select
+      the exact decoded-path thresholds, then evaluate the heuristic floor, high
+      ML, and the combined condition in that order. Add HeuristicHigh to the
+      thresholds struct. On failure, retain the earlier heuristic cutoff.

@@ -1,16 +1,8 @@
 hints:
-  - title_markdown: "How do I normalize Unicode in Go?"
-    body_markdown: |-
-      The starter includes `golang.org/x/text@v0.32.0` for Go 1.25. First remove
-      the policy's zero-width characters with `strings.ReplaceAll`. Then use
-      `norm.NFKC.String(text)` from `golang.org/x/text/unicode/norm`, then
-      `cases.Fold().String(text)` from `golang.org/x/text/cases`, and map each
-      rune through the homoglyph table. `strings.ToLower` does not implement
-      full case folding.
-  - title_markdown: "How do I inspect base64 without rewriting the request?"
-    body_markdown: |-
-      Keep your original request bytes and build separate inspection strings.
-      Try `base64.StdEncoding.DecodeString` on each original message and check
-      `utf8.Valid` on the decoded bytes. Don't re-encode to compare; accept
-      whatever the decoder accepts. Normalize the decoded text once too.
-      Inspect both candidates and forward the untouched request body when allowed.
+  - title_markdown: Which decoding and Unicode functions should I use?
+    body_markdown:
+      Use r.URL.Path for the already-decoded path. Split RawQuery on ampersands
+      and decode each value once with url.QueryUnescape, validating UTF-8. Use
+      norm.NFKC.String followed by cases.Fold().String from golang.org/x/text.
+      Preserve RequestURI for forwarding and the original decoded path for route
+      comparisons.

@@ -1,0 +1,6 @@
+hints:
+  - title_markdown: How do I keep the server available?
+    body_markdown:
+      Register a /health handler with net/http, then call http.ListenAndServe
+      once. A handler answers one request; ListenAndServe keeps accepting
+      subsequent requests. Write debug output to os.Stderr.

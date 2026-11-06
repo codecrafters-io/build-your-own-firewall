@@ -1,14 +1,8 @@
 hints:
-  - title_markdown: "How do I forward requests in Go?"
-    body_markdown: |-
-      Parse the origin URL with `url.Parse` and create an
-      [`httputil.ReverseProxy`](https://pkg.go.dev/net/http/httputil#ReverseProxy).
-      Set its `Rewrite` function to call `request.SetURL(target)`, which adjusts
-      both the URL and the outgoing host. Register its `ServeHTTP` method for
-      `/v1/chat/completions`, keeping your health handler separate.
-  - title_markdown: "How do I preserve JSON and handle origin failures?"
-    body_markdown: |-
-      Pass the request to the reverse proxy without decoding its body. This keeps
-      conversation history and optional fields intact. The proxy relays origin
-      error responses and returns HTTP 502 when it cannot reach the origin.
-      Read the `--origin` flag rather than hardcoding the tester's port.
+  - title_markdown: How do I preserve traffic while proxying?
+    body_markdown:
+      Create an upstream http.Request using the original method, RequestURI, and
+      body bytes. Copy end-to-end headers while removing connection-specific and
+      X-WAF headers. http.Client follows redirects by default; set CheckRedirect
+      to return http.ErrUseLastResponse. Disable automatic compression to
+      preserve response bytes.

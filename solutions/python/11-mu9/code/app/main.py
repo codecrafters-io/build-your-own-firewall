@@ -1,545 +1,280 @@
-import urllib.parse
-import re
 import argparse
-import base64
-import binascii
-import unicodedata
 import json
-import http.client
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+import re
+import unicodedata
+import urllib.parse
+import math
+import threading
+import time
 
 
-def inspection_texts(text, settings):
-    if settings is None:
-        return [text]
-
-    def normalize(value):
-        for character in settings["zero_width"]:
-            value = value.replace(character, "")
-        value = unicodedata.normalize("NFKC", value).casefold()
-        return "".join(settings["homoglyphs"].get(character, character) for character in value)
-
-    candidates = [normalize(text)]
-    try:
-        decoded = base64.b64decode(text, validate=True)
-        candidates.append(normalize(decoded.decode("utf-8")))
-    except (ValueError, binascii.Error):
-        pass
-    return candidates
-
-
-def inspect_messages(body):
-    """Keep roles and text grouped by their original message index."""
-    try:
-        messages = []
-        for message in json.loads(body)["messages"]:
-            texts = []
-            content = message.get("content")
-            if isinstance(content, str):
-                texts.append(content)
-            elif isinstance(content, list):
-                for part in content:
-                    if part.get("type") != "text" or not isinstance(part.get("text"), str):
-                        return None
-                    texts.append(part["text"])
-            elif content is not None:
-                return None
-            messages.append((message.get("role"), texts))
-        return messages
-    except (ValueError, KeyError, TypeError, AttributeError):
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
         return None
 
 
-def near_terms(text, first, second, max_gap):
-    def positions(term):
-        return [index for index in range(len(text)) if text.startswith(term, index)]
-
-    for left in positions(first):
-        for right in positions(second):
-            if 0 <= right - (left + len(first)) <= max_gap:
-                return True
-            if 0 <= left - (right + len(second)) <= max_gap:
-                return True
-    return False
+HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+               "te", "trailer", "transfer-encoding", "upgrade", "content-length"}
 
 
-def score_heuristics(candidates, settings):
-    score, signals = 0, []
-    for signal in settings["signals"]:
-        for text in candidates:
-            matched = signal["term"] in text if signal["kind"] == "contains" else near_terms(
-                text, signal["term"], signal["other"], signal["max_gap"]
-            )
-            if matched:
-                score += signal["weight"]
-                signals.append(signal["id"])
-                break
-    return score, signals
+def decode_component(value, plus=False):
+    if re.search(r"%(?![0-9a-fA-F]{2})", value):
+        raise ValueError("Invalid percent escape")
+    if plus:
+        value = value.replace("+", " ")
+    return urllib.parse.unquote(value, encoding="utf-8", errors="strict")
 
 
-def score_message_heuristics(messages, settings, normalization):
-    results = []
-    seen = set()
-    for _, texts in messages:
-        candidates = [candidate for text in texts for candidate in inspection_texts(text, normalization)]
-        score, signals = score_heuristics(candidates, settings)
-        results.append((score, signals))
-        seen.update(signals)
-    signals = [signal["id"] for signal in settings["signals"] if signal["id"] in seen]
-    score = sum(signal["weight"] for signal in settings["signals"] if signal["id"] in seen)
-    return results, score, signals
-
-
-class NoDetectorRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, request, response, code, message, headers, new_url):
-        return None
-
-
-def classify_messages(body, endpoint, opener):
-    messages = json.loads(body)["messages"]
-    if not messages:
-        return []
-
-    def classify(message):
-        request = urllib.request.Request(
-            endpoint.rstrip("/") + "/classify",
-            data=json.dumps(message, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with opener.open(request, timeout=0.2) as response:
-            if response.status != 200:
-                raise ValueError("Classifier did not return HTTP 200")
-            score = json.loads(response.read())["score"]
-            if type(score) is not int or not 0 <= score <= 100:
-                raise ValueError("Invalid classifier score")
-            return score
-
-    scores = []
-    available = True
-    for message in messages:
-        try:
-            scores.append(classify(message))
-        except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException):
-            available = False
-    return scores if available else None
-
-
-def decision_rule(messages, message_scores, scores, settings):
-    for (role, _), (heuristic_score, _), classifier_score in zip(messages, message_scores, scores):
-        thresholds = settings["tool" if role == "tool" else "default"]
-        if classifier_score >= thresholds["classifier_high"]:
-            return "classifier_high"
-        if (classifier_score >= thresholds["classifier_medium"]
-                and heuristic_score >= thresholds["heuristic_medium"]):
-            return "combined_scores"
-    return ""
-
-
-
-def redact_request(body, patterns):
-    request = json.loads(body)
-    placeholders = {}
-    changed = False
-
-    def redact(text):
-        nonlocal changed
-        result = []
-        while text:
-            best = None
-            for pattern in patterns:
-                match = pattern.search(text)
-                if match and (best is None or match.start() < best.start()):
-                    best = match
-            if best is None:
-                result.append(text)
-                break
-            value = best.group()
-            if value not in placeholders:
-                placeholders[value] = f"[REDACTED_{len(placeholders) + 1}]"
-            result.extend((text[:best.start()], placeholders[value]))
-            text = text[best.end():]
-            changed = True
-        return "".join(result)
-
-    for message in request["messages"]:
-        content = message.get("content")
-        if isinstance(content, str):
-            message["content"] = redact(content)
-        elif isinstance(content, list):
-            for part in content:
-                part["text"] = redact(part["text"])
-    return json.dumps(request).encode() if changed else body
-
-
-def contains_canary(body, canary):
-    if canary.encode() in body:
-        return True
-
-    def contains(value):
-        if isinstance(value, str):
-            return canary in value
-        if isinstance(value, list):
-            return any(contains(child) for child in value)
-        if isinstance(value, dict):
-            return any(contains(child) for child in value.values())
-        return False
-
-    try:
-        return contains(json.loads(body))
-    except (ValueError, UnicodeDecodeError):
-        return False
-
-
-
-
-def reject_json_constant(value):
-    raise ValueError("Non-JSON number")
-
-
-def tool_rule(calls, tools):
-    if tools is None:
-        return ""
-    for call in calls:
-        function = call.get("function", {})
-        name = function.get("name")
-        if name not in tools or call.get("type") != "function":
-            return "tool_not_allowed"
-        try:
-            arguments = json.loads(function.get("arguments", ""), parse_constant=reject_json_constant)
-        except (ValueError, TypeError):
-            return "tool_arguments_invalid"
-        if not isinstance(arguments, dict):
-            return "tool_arguments_invalid"
-        settings = tools[name]
-        if not settings.get("url_argument"):
-            continue
-        raw = arguments.get(settings["url_argument"])
-        if not isinstance(raw, str):
-            return "tool_arguments_invalid"
-        if any(ord(character) <= 32 or ord(character) == 127 or character == "\\" for character in raw):
-            return "tool_destination_not_allowed"
-        try:
-            target = urllib.parse.urlsplit(raw)
-            port = target.port
-            if (target.scheme not in ("http", "https") or not target.hostname
-                    or target.username is not None or target.netloc.endswith(":")
-                    or (port is not None and not 1 <= port <= 65535)):
-                return "tool_destination_not_allowed"
-        except ValueError:
-            return "tool_destination_not_allowed"
-        if target.hostname.lower() not in [host.lower() for host in settings["allowed_hosts"]]:
-            return "tool_destination_not_allowed"
-    return ""
-
-
-def response_tool_rule(body, tools):
-    if tools is None:
-        return ""
-    try:
-        response = json.loads(body)
-        for choice in response.get("choices", []):
-            rule = tool_rule(choice.get("message", {}).get("tool_calls") or [], tools)
-            if rule:
-                return rule
-    except (ValueError, TypeError, AttributeError):
-        return "tool_arguments_invalid"
-    return ""
-
-
-
-def private_values(body, settings):
-    if settings is None:
-        return []
-    messages = json.loads(body)["messages"]
-    names = {call["id"]: call["function"]["name"]
-             for message in messages if message.get("role") == "assistant"
-             for call in message.get("tool_calls") or []}
+def form_values(raw):
     values = []
-    for message in messages:
-        if (message.get("role") == "tool"
-                and names.get(message.get("tool_call_id")) in settings["private_tools"]):
-            values.extend(json.loads(message["content"]).values())
+    for part in raw.split("&"):
+        if part:
+            key, _, value = part.partition("=")
+            decode_component(key, True)
+            values.append(decode_component(value, True))
     return values
 
 
-def argument_strings(value):
+def canonical(value):
+    return unicodedata.normalize("NFKC", value).casefold()
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def invalid_constant(value):
+    raise ValueError("Invalid JSON constant")
+
+
+def parse_json(raw):
+    return json.loads(raw, object_pairs_hook=unique_object,
+                      parse_constant=invalid_constant)
+
+
+def strings(value):
     if isinstance(value, str):
-        yield value
-        try:
-            target = urllib.parse.urlsplit(value)
-            if target.scheme in ("http", "https") and target.netloc:
-                for values in urllib.parse.parse_qs(target.query, keep_blank_values=True).values():
-                    yield from values
-        except ValueError:
-            pass
-    elif isinstance(value, list):
-        for item in value:
-            yield from argument_strings(item)
-    elif isinstance(value, dict):
-        for item in value.values():
-            yield from argument_strings(item)
-
-
-def export_rule(calls, settings, values, normalization):
-    if settings is None or not values:
-        return ""
-    if normalization is None:
-        normalization = {"zero_width": [], "homoglyphs": {}}
-    protected = [inspection_texts(value, normalization)[0] for value in values]
-    for call in calls:
-        try:
-            arguments = json.loads(call["function"]["arguments"], parse_constant=reject_json_constant)
-        except (ValueError, TypeError):
-            return "tool_arguments_invalid"
-        if not isinstance(arguments, dict):
-            return "tool_arguments_invalid"
-        matched = any(value in candidate for text in argument_strings(arguments)
-                      for candidate in inspection_texts(text, normalization)
-                      for value in protected if value)
-        if not matched:
-            continue
-        approved = False
-        for export in settings["allowed"]:
-            if export["tool"] != call["function"]["name"]:
-                continue
-            recipient = arguments.get(export["destination_argument"])
-            if (isinstance(recipient, str) and recipient.count("@") == 1
-                    and all(32 < ord(character) < 127 for character in recipient)):
-                local, domain = recipient.split("@")
-                if local and domain.lower() == export["email_domain"].lower():
-                    approved = True
-                    break
-        if not approved:
-            return "private_export"
-    return ""
-
-
-def response_export_rule(body, settings, values, normalization):
-    if settings is None or not values:
-        return ""
-    for choice in json.loads(body).get("choices", []):
-        rule = export_rule(choice.get("message", {}).get("tool_calls") or [], settings, values, normalization)
-        if rule:
-            return rule
-    return ""
-
-
-def inspect_stream(origin, emit, canary, tools, exports, values, normalization):
-    calls = {}
-    pending = ""
-    keep = max(0, len(canary) - 1)
-
-    def emit_text(text):
-        if text:
-            emit({"id": "chatcmpl-firewall", "object": "chat.completion.chunk",
-                  "created": 0, "model": "course-model", "choices": [
-                      {"index": 0, "delta": {"content": text}, "finish_reason": None}]})
-
-    for line in origin:
-        if not line.startswith(b"data:"):
-            continue
-        data = line[5:].strip()
-        if data == b"[DONE]":
-            batch = [calls[index] for index in sorted(calls)]
-            rule = "canary_leak" if batch and canary and contains_canary(json.dumps(batch).encode(), canary) else tool_rule(batch, tools)
-            if not rule:
-                rule = export_rule(batch, exports, values, normalization)
-            if rule:
-                emit({"error": {"message": "Blocked outgoing tool call", "type": "firewall_block", "rule": rule}})
-                return
-            emit_text(pending)
-            if batch:
-                emit({"id": "chatcmpl-firewall", "object": "chat.completion.chunk",
-                      "created": 0, "model": "course-model", "choices": [
-                          {"index": 0, "delta": {"tool_calls": batch}, "finish_reason": "tool_calls"}]})
-            emit("[DONE]")
-            return
-        chunk = json.loads(data)
-        if not chunk.get("choices"):
-            continue
-        delta = chunk["choices"][0].get("delta", {})
-        for fragment in delta.get("tool_calls") or []:
-            index = fragment["index"]
-            if index not in calls:
-                calls[index] = {"index": index, "id": "", "type": "", "function": {"name": "", "arguments": ""}}
-            call = calls[index]
-            call["id"] += fragment.get("id", "")
-            call["type"] += fragment.get("type", "")
-            call["function"]["name"] += fragment.get("function", {}).get("name", "")
-            call["function"]["arguments"] += fragment.get("function", {}).get("arguments", "")
-        pending += delta.get("content") or ""
-        if canary and canary in pending:
-            emit({"error": {"message": "Blocked outgoing canary",
-                            "type": "firewall_block", "rule": "canary_leak"}})
-            return
-        if len(pending) > keep:
-            emit_text(pending[:len(pending) - keep])
-            pending = pending[len(pending) - keep:]
+        return [value]
+    if isinstance(value, list):
+        return [text for item in value for text in strings(item)]
+    if isinstance(value, dict):
+        return [text for item in value.values() for text in strings(item)]
+    return []
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--origin")
-    parser.add_argument("--detector")
-    parser.add_argument("--policy")
+    parser.add_argument("--origin", required=True)
+    parser.add_argument("--detector", required=True)
+    parser.add_argument("--policy", required=True)
     args = parser.parse_args()
-
-    with open(args.policy, encoding="utf-8") as policy_file:
-        policy = json.load(policy_file)
-
-    redaction_patterns = [re.compile(pattern) for pattern in policy.get("dlp", {}).get("patterns", [])]
-    detector_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoDetectorRedirect())
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    policy = json.loads(Path(args.policy).read_text())
+    buckets = {}
+    bucket_lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200 if self.path == "/health" else 404)
+        def reject(self, status, rule, diagnostics=None):
+            payload = json.dumps({"error": {"rule": rule}}).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("X-WAF-Match", rule)
+            for key, value in (diagnostics or {}).items():
+                if key.lower() != "x-waf-match":
+                    self.send_header(key, str(value))
+            self.send_header("Connection", "close")
             self.end_headers()
+            self.wfile.write(payload)
+            self.close_connection = True
 
-        def do_POST(self):
-            if self.path != "/v1/chat/completions":
-                self.send_error(404)
-                return
-            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-            messages = inspect_messages(body)
-            if messages is None:
-                self.send_error(400, "Could not inspect request")
-                return
-            protected = private_values(body, policy.get("exports"))
-            inspection = [
-                candidate
-                for _, texts in messages
-                for text in texts
-                for candidate in inspection_texts(text, policy.get("normalization"))
-            ]
-            matched_rule = next(
-                (
-                    rule["id"]
-                    for rule in policy.get("denylist", [])
-                    if any(rule["term"] in text for text in inspection)
-                ),
-                "",
-            )
-            score_headers = {}
-            message_scores = [(0, []) for _ in messages]
-            heuristic_score = 0
-            if "heuristics" in policy:
-                message_scores, score, signals = score_message_heuristics(
-                    messages, policy["heuristics"], policy.get("normalization")
-                )
-                heuristic_score = score
-                score_headers["X-Firewall-Score"] = str(score)
-                if signals:
-                    score_headers["X-Firewall-Signals"] = ",".join(signals)
-                if not matched_rule and "decisions" not in policy and score >= policy["heuristics"]["threshold"]:
-                    matched_rule = "heuristic_score"
-            if "classifier" in policy:
-                scores = classify_messages(body, args.detector, detector_opener)
-                if scores is None:
-                    score_headers["X-Firewall-Detector-Status"] = "unavailable"
-                    if (not matched_rule and "heuristics" in policy
-                            and heuristic_score >= policy["heuristics"]["threshold"]):
-                        matched_rule = "heuristic_score"
-                else:
-                    highest = max(scores, default=0)
-                    score_headers["X-Firewall-Detector-Status"] = "ok"
-                    score_headers["X-Firewall-Classifier-Score"] = str(highest)
-                    if not matched_rule:
-                        if "decisions" in policy:
-                            matched_rule = decision_rule(messages, message_scores, scores, policy["decisions"])
-                        elif highest >= policy["classifier"]["threshold"]:
-                            matched_rule = "classifier_score"
-            if matched_rule and policy.get("mode", "block") != "log":
-                data = json.dumps({"error": {
-                    "message": "Blocked by firewall policy",
-                    "type": "firewall_block",
-                    "rule": matched_rule,
-                }}).encode()
-                self.send_response(403)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                for name, value in score_headers.items():
-                    self.send_header(name, value)
+        def handle_request(self):
+            if self.command == "GET" and self.path == "/health":
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
                 self.end_headers()
-                self.wfile.write(data)
                 return
-            headers = {
-                name: self.headers[name]
-                for name in ("Authorization", "Content-Type")
-                if name in self.headers
-            }
-            if "dlp" in policy:
-                body = redact_request(body, redaction_patterns)
-            streaming = json.loads(body).get("stream") is True
-            request = urllib.request.Request(
-                args.origin.rstrip("/") + self.path,
-                data=body,
-                headers=headers,
-                method="POST",
-            )
+            diagnostics = {}
+            length = int(self.headers.get("Content-Length", 0))
+            inspection = policy.get("inspection")
+            if inspection and length > inspection["max_body_bytes"]:
+                self.reject(413, "body_too_large")
+                return
+            body = self.rfile.read(length)
+            inputs = [self.path, body.decode("utf-8", errors="replace")]
             try:
-                response = urllib.request.urlopen(request, timeout=5 if streaming else 2)
-            except urllib.error.HTTPError as error:
-                response = error
-            except urllib.error.URLError:
-                self.send_response(502)
-                for name, value in score_headers.items():
-                    self.send_header(name, value)
-                self.end_headers()
+                raw_path, _, query = self.path.partition("?")
+                decoded_path = decode_component(raw_path)
+                if policy.get("normalization"):
+                    inputs = [decoded_path, *form_values(query)]
+                    for name in policy.get("inspect_headers", []):
+                        inputs.extend(value.encode("latin-1").decode("utf-8", errors="replace")
+                                      for value in self.headers.get_all(name, []))
+                    inputs.append(body.decode("utf-8", errors="replace"))
+            except (ValueError, UnicodeError):
+                self.reject(400, "invalid_request")
                 return
-            with response:
-                if (streaming and ("dlp" in policy or "tools" in policy or "exports" in policy)
-                        and response.status == 200
-                        and response.headers.get("Content-Type", "").startswith("text/event-stream")):
-                    self.send_response(200)
-                    for name in ("Content-Type", "X-Request-Id"):
-                        if name in response.headers:
-                            self.send_header(name, response.headers[name])
-                    for name, value in score_headers.items():
-                        self.send_header(name, value)
-                    if matched_rule:
-                        self.send_header("X-Firewall-Match", matched_rule)
-                    self.end_headers()
-
-                    def emit(value):
-                        data = value if value == "[DONE]" else json.dumps(value)
-                        self.wfile.write(("data: " + data + "\n\n").encode())
-                        self.wfile.flush()
-
-                    inspect_stream(response, emit, policy.get("dlp", {}).get("canary", ""), policy.get("tools"), policy.get("exports"), protected, policy.get("normalization"))
+            if inspection and body:
+                try:
+                    if self.headers.get("Content-Encoding", "identity").lower() != "identity":
+                        self.reject(415, "unsupported_body")
+                        return
+                    text = body.decode("utf-8")
+                    media_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+                    if media_type == "application/json":
+                        body_inputs = strings(parse_json(text))
+                    elif media_type == "application/x-www-form-urlencoded":
+                        body_inputs = form_values(text)
+                    elif media_type == "text/plain":
+                        body_inputs = [text]
+                    else:
+                        self.reject(415, "unsupported_body")
+                        return
+                    inputs = inputs[:-1] + body_inputs
+                except (ValueError, UnicodeError):
+                    self.reject(400, "invalid_request")
                     return
-                data = response.read()
-                rule = ""
-                if "dlp" in policy and contains_canary(data, policy["dlp"]["canary"]):
-                    rule = "canary_leak"
-                if not rule and response.status == 200:
-                    rule = response_tool_rule(data, policy.get("tools"))
-                    if not rule:
-                        rule = response_export_rule(data, policy.get("exports"), protected, policy.get("normalization"))
-                if rule:
-                    data = json.dumps({"error": {"message": "Blocked outgoing response",
-                        "type": "firewall_block", "rule": rule}}).encode()
-                    self.send_response(403)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Content-Length", str(len(data)))
-                    for name, value in score_headers.items():
-                        self.send_header(name, value)
-                    self.end_headers()
-                    self.wfile.write(data)
+            if policy.get("normalization"):
+                inputs = [canonical(value) for value in inputs]
+            rate = policy.get("rate_limit")
+            if rate and ("paths" not in rate or decoded_path in rate["paths"]):
+                now = time.monotonic()
+                with bucket_lock:
+                    expired = [key for key, (start, _) in buckets.items()
+                               if now - start >= rate["window_seconds"]]
+                    for key in expired:
+                        del buckets[key]
+                    key = self.client_address[0]
+                    start, count = buckets.get(key, (now, 0))
+                    if count >= rate["requests"]:
+                        retry = max(1, math.ceil(rate["window_seconds"] - (now - start)))
+                    else:
+                        buckets[key] = (start, count + 1)
+                        retry = 0
+                if retry:
+                    self.reject(429, "rate_limit", {"Retry-After": retry})
                     return
-                self.send_response(response.status)
-                for name in ("Content-Type", "X-Request-Id"):
-                    if name in response.headers:
-                        self.send_header(name, response.headers[name])
-                for name, value in score_headers.items():
-                    self.send_header(name, value)
-                if matched_rule:
-                    self.send_header("X-Firewall-Match", matched_rule)
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+            match = next((rule["id"] for rule in policy.get("denylist", [])
+                          if any(rule["term"] in value for value in inputs)), None)
+            heuristic = policy.get("heuristics")
+            signals = [signal for signal in (heuristic or {}).get("signals", [])
+                       if any(re.search(signal["pattern"], value) for value in inputs)]
+            score = sum(signal["weight"] for signal in signals)
+            if heuristic:
+                diagnostics["X-WAF-Score"] = str(score)
+                if signals:
+                    diagnostics["X-WAF-Signals"] = ",".join(signal["id"] for signal in signals)
+                if not match and score >= heuristic["threshold"]:
+                    match = "heuristic_score"
+            classifier = policy.get("classifier")
+            ml_score = None
+            if classifier:
+                try:
+                    request = urllib.request.Request(args.detector.rstrip("/") + "/classify",
+                        data=json.dumps({"inputs": inputs}).encode(),
+                        headers={"Content-Type": "application/json"}, method="POST")
+                    with opener.open(request, timeout=0.2) as response:
+                        if response.status != 200:
+                            raise ValueError("Unavailable classifier")
+                        result = json.loads(response.read())
+                    if not isinstance(result, dict) or type(result.get("score")) is not int:
+                        raise ValueError("Invalid classifier score")
+                    if not 0 <= result["score"] <= 100:
+                        raise ValueError("Invalid classifier score")
+                    ml_score = result["score"]
+                except (OSError, ValueError, urllib.error.URLError):
+                    pass
+                diagnostics["X-WAF-Detector-Status"] = "ok" if ml_score is not None else "unavailable"
+                if ml_score is not None:
+                    diagnostics["X-WAF-ML-Score"] = str(ml_score)
+                    if not match and ml_score >= classifier["threshold"]:
+                        match = "ml_score"
+            decisions = policy.get("decisions")
+            if decisions and ml_score is not None:
+                thresholds = decisions["default"]
+                for route in decisions.get("routes", []):
+                    if decoded_path == route["path"]:
+                        thresholds = route
+                        break
+                match = next((rule["id"] for rule in policy.get("denylist", [])
+                              if any(rule["term"] in value for value in inputs)), None)
+                if not match:
+                    if score >= thresholds["heuristic_high"]:
+                        match = "heuristic_high"
+                    elif ml_score >= thresholds["ml_high"]:
+                        match = "ml_high"
+                    elif ml_score >= thresholds["ml_medium"] and score >= thresholds["heuristic_medium"]:
+                        match = "combined_scores"
+            if match:
+                if policy.get("mode", "block") == "block":
+                    self.reject(403, match, diagnostics)
+                    return
+                diagnostics["X-WAF-Match"] = match
+            for patch in policy.get("virtual_patches", []):
+                if self.command == patch["method"] and decoded_path == patch["path"]:
+                    try:
+                        value = parse_json(body.decode("utf-8"))
+                        values = value.get(patch["argument"]) if isinstance(value, dict) else None
+                        valid = (isinstance(values, list) and len(values) > 0
+                                 and all(isinstance(item, str) and item in patch["allowed_values"]
+                                         for item in values))
+                    except (ValueError, UnicodeError):
+                        valid = False
+                    if not valid:
+                        self.reject(403, patch["id"], diagnostics)
+                        return
+            try:
+                excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(self.headers.get_all("Connection", [])).split(",")}
+                headers = {key: value for key, value in self.headers.items()
+                           if key.lower() not in excluded and key.lower() != "host"
+                           and not key.lower().startswith("x-waf-")}
+                request = urllib.request.Request(args.origin.rstrip("/") + self.path,
+                    data=body if length or self.command in {"POST", "PUT", "PATCH"} else None,
+                    headers=headers, method=self.command)
+                try:
+                    response = opener.open(request, timeout=3)
+                except urllib.error.HTTPError as error:
+                    response = error
+                with response:
+                    response_policy = policy.get("response")
+                    content = response.read(response_policy["max_bytes"] + 1) if response_policy else response.read()
+                    if response_policy:
+                        if len(content) > response_policy["max_bytes"]:
+                            self.reject(502, "response_too_large", diagnostics)
+                            return
+                        candidates = [content.decode("utf-8", errors="replace")]
+                        try:
+                            candidates.extend(strings(json.loads(content,
+                                object_pairs_hook=lambda pairs: [item for pair in pairs for item in pair])))
+                        except (ValueError, UnicodeError):
+                            pass
+                        if any(re.search(pattern, value) for pattern in response_policy["deny_patterns"]
+                               for value in candidates):
+                            self.reject(403, "response_leak", diagnostics)
+                            return
+                    self.send_response(response.status)
+                    excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(response.headers.get_all("Connection", [])).split(",")}
+                    for key, value in response.getheaders():
+                        if key.lower() not in excluded and not key.lower().startswith("x-waf-"):
+                            self.send_header(key, value)
+                    self.send_header("Content-Length", str(len(content)))
+                    for key, value in diagnostics.items():
+                        self.send_header(key, value)
+                    self.end_headers()
+                    self.wfile.write(content)
+            except (OSError, urllib.error.URLError):
+                self.reject(502, "origin_unavailable", diagnostics)
+
+        do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request
 
     ThreadingHTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
 

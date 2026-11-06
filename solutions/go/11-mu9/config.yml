@@ -1,24 +1,8 @@
 hints:
-  - title_markdown: "How do I find private values in conversation history?"
-    body_markdown: |-
-      Build a map from each assistant tool call ID to its function name. Resolve
-      each tool result through tool_call_id, then consult exports.private_tools.
-      Parse private result content as a JSON object and collect every string value.
-      Do this before redaction, and keep the collection local to this HTTP request.
-      Result order and optional name fields do not establish provenance. In Go,
-      use json.RawMessage for content so other messages can still hold text parts.
-  - title_markdown: "Why does decoding the argument string miss the finale?"
-    body_markdown: |-
-      First parse the JSON arguments. Walk string values recursively. A URL string
-      also contributes each parsed query parameter value, so the base64 query can
-      be decoded by itself. Normalize private values without decoding them. Compare
-      them with each normalized candidate and its single decoded form. Do not
-      recursively decode or match only the serialized private record.
-  - title_markdown: "Where should I apply export authorization?"
-    body_markdown: |-
-      Run it after existing canary and tool checks, before releasing any calls.
-      A call containing a protected value requires its own approved tool and exact
-      recipient domain. On streams, inspect the entire completed batch at DONE.
-      One denial discards every call and pending text, even in log mode. Reuse the
-      existing private_export JSON or SSE error shape without exposing the value.
-      A typed context key can carry request-local values into ModifyResponse.
+  - title_markdown: How do I enforce the patch independently of detection?
+    body_markdown:
+      After request detectors pass, find matching method/path entries. Parse the
+      original body using the duplicate-key-checking parser even when body
+      inspection is disabled. Require the configured argument to be a nonempty
+      []any, then check every element against the exact allowed strings. Forward
+      the untouched bytes only after every applicable patch passes.

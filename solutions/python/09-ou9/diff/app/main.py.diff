@@ -1,173 +1,160 @@
-@@ -170,50 +170,82 @@
-         elif isinstance(content, list):
-             for part in content:
-                 part["text"] = redact(part["text"])
-     return json.dumps(request).encode() if changed else body
+@@ -1,34 +1,37 @@
+ import argparse
+ import json
+ import urllib.error
+ import urllib.request
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ from pathlib import Path
+ import re
+ import unicodedata
+ import urllib.parse
++import math
++import threading
++import time
 
 
- def contains_canary(body, canary):
-     if canary.encode() in body:
-         return True
-
-     def contains(value):
-         if isinstance(value, str):
-             return canary in value
-         if isinstance(value, list):
-             return any(contains(child) for child in value)
-         if isinstance(value, dict):
-             return any(contains(child) for child in value.values())
-         return False
-
-     try:
-         return contains(json.loads(body))
-     except (ValueError, UnicodeDecodeError):
-         return False
+ class NoRedirect(urllib.request.HTTPRedirectHandler):
+     def redirect_request(self, request, fp, code, message, headers, new_url):
+         return None
 
 
-+
-+def inspect_stream(origin, emit, canary):
-+    pending = ""
-+    keep = len(canary) - 1
-+
-+    def emit_text(text):
-+        if text:
-+            emit({"id": "chatcmpl-firewall", "object": "chat.completion.chunk",
-+                  "created": 0, "model": "course-model", "choices": [
-+                      {"index": 0, "delta": {"content": text}, "finish_reason": None}]})
-+
-+    for line in origin:
-+        if not line.startswith(b"data:"):
-+            continue
-+        data = line[5:].strip()
-+        if data == b"[DONE]":
-+            emit_text(pending)
-+            emit("[DONE]")
-+            return
-+        chunk = json.loads(data)
-+        if not chunk.get("choices"):
-+            continue
-+        pending += chunk["choices"][0].get("delta", {}).get("content") or ""
-+        if canary in pending:
-+            emit({"error": {"message": "Blocked outgoing canary",
-+                            "type": "firewall_block", "rule": "canary_leak"}})
-+            return
-+        if len(pending) > keep:
-+            emit_text(pending[:len(pending) - keep])
-+            pending = pending[len(pending) - keep:]
-+
-+
+ HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+                "te", "trailer", "transfer-encoding", "upgrade", "content-length"}
+
+
+ def decode_component(value, plus=False):
+     if re.search(r"%(?![0-9a-fA-F]{2})", value):
+         raise ValueError("Invalid percent escape")
+     if plus:
+         value = value.replace("+", " ")
+     return urllib.parse.unquote(value, encoding="utf-8", errors="strict")
+
+
+ def form_values(raw):
+     values = []
+     for part in raw.split("&"):
+         if part:
+             key, _, value = part.partition("=")
+             decode_component(key, True)
+@@ -54,50 +57,52 @@
+
+
+ def parse_json(raw):
+     return json.loads(raw, object_pairs_hook=unique_object,
+                       parse_constant=invalid_constant)
+
+
+ def strings(value):
+     if isinstance(value, str):
+         return [value]
+     if isinstance(value, list):
+         return [text for item in value for text in strings(item)]
+     if isinstance(value, dict):
+         return [text for item in value.values() for text in strings(item)]
+     return []
+
+
  def main():
      parser = argparse.ArgumentParser()
-     parser.add_argument("--origin")
-     parser.add_argument("--detector")
-     parser.add_argument("--policy")
+     parser.add_argument("--origin", required=True)
+     parser.add_argument("--detector", required=True)
+     parser.add_argument("--policy", required=True)
      args = parser.parse_args()
-
-     with open(args.policy, encoding="utf-8") as policy_file:
-         policy = json.load(policy_file)
-
-     redaction_patterns = [re.compile(pattern) for pattern in policy.get("dlp", {}).get("patterns", [])]
-     detector_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoDetectorRedirect())
+     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+     policy = json.loads(Path(args.policy).read_text())
++    buckets = {}
++    bucket_lock = threading.Lock()
 
      class Handler(BaseHTTPRequestHandler):
-         def do_GET(self):
-             self.send_response(200 if self.path == "/health" else 404)
+         def reject(self, status, rule, diagnostics=None):
+             payload = json.dumps({"error": {"rule": rule}}).encode()
+             self.send_response(status)
+             self.send_header("Content-Type", "application/json")
+             self.send_header("Content-Length", str(len(payload)))
+             self.send_header("X-WAF-Match", rule)
+             for key, value in (diagnostics or {}).items():
+                 if key.lower() != "x-waf-match":
+                     self.send_header(key, str(value))
+             self.send_header("Connection", "close")
              self.end_headers()
+             self.wfile.write(payload)
+             self.close_connection = True
 
-         def do_POST(self):
-             if self.path != "/v1/chat/completions":
-                 self.send_error(404)
-                 return
-             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-             messages = inspect_messages(body)
-             if messages is None:
-@@ -261,67 +293,88 @@
-                         if "decisions" in policy:
-                             matched_rule = decision_rule(messages, message_scores, scores, policy["decisions"])
-                         elif highest >= policy["classifier"]["threshold"]:
-                             matched_rule = "classifier_score"
-             if matched_rule and policy.get("mode", "block") != "log":
-                 data = json.dumps({"error": {
-                     "message": "Blocked by firewall policy",
-                     "type": "firewall_block",
-                     "rule": matched_rule,
-                 }}).encode()
-                 self.send_response(403)
-                 self.send_header("Content-Type", "application/json")
-                 self.send_header("Content-Length", str(len(data)))
-                 for name, value in score_headers.items():
-                     self.send_header(name, value)
-                 self.end_headers()
-                 self.wfile.write(data)
-                 return
-             headers = {
-                 name: self.headers[name]
-                 for name in ("Authorization", "Content-Type")
-                 if name in self.headers
-             }
-             if "dlp" in policy:
-                 body = redact_request(body, redaction_patterns)
-+            streaming = json.loads(body).get("stream") is True
-             request = urllib.request.Request(
-                 args.origin.rstrip("/") + self.path,
-                 data=body,
-                 headers=headers,
-                 method="POST",
-             )
-             try:
--                response = urllib.request.urlopen(request, timeout=2)
-+                response = urllib.request.urlopen(request, timeout=5 if streaming else 2)
-             except urllib.error.HTTPError as error:
-                 response = error
-             except urllib.error.URLError:
-                 self.send_response(502)
-                 for name, value in score_headers.items():
-                     self.send_header(name, value)
+         def handle_request(self):
+             if self.command == "GET" and self.path == "/health":
+                 self.send_response(200)
+                 self.send_header("Content-Length", "0")
                  self.end_headers()
                  return
-             with response:
-+                if (streaming and "dlp" in policy
-+                        and response.status == 200
-+                        and response.headers.get("Content-Type", "").startswith("text/event-stream")):
-+                    self.send_response(200)
-+                    for name in ("Content-Type", "X-Request-Id"):
-+                        if name in response.headers:
-+                            self.send_header(name, response.headers[name])
-+                    for name, value in score_headers.items():
-+                        self.send_header(name, value)
-+                    if matched_rule:
-+                        self.send_header("X-Firewall-Match", matched_rule)
-+                    self.end_headers()
-+
-+                    def emit(value):
-+                        data = value if value == "[DONE]" else json.dumps(value)
-+                        self.wfile.write(("data: " + data + "\n\n").encode())
-+                        self.wfile.flush()
-+
-+                    inspect_stream(response, emit, policy["dlp"]["canary"])
-+                    return
-                 data = response.read()
-                 if "dlp" in policy and contains_canary(data, policy["dlp"]["canary"]):
-                     data = json.dumps({"error": {"message": "Blocked outgoing canary",
-                         "type": "firewall_block", "rule": "canary_leak"}}).encode()
-                     self.send_response(403)
-                     self.send_header("Content-Type", "application/json")
-                     self.send_header("Content-Length", str(len(data)))
-                     for name, value in score_headers.items():
-                         self.send_header(name, value)
-                     self.end_headers()
-                     self.wfile.write(data)
+             diagnostics = {}
+             length = int(self.headers.get("Content-Length", 0))
+             inspection = policy.get("inspection")
+@@ -118,50 +123,68 @@
+             except (ValueError, UnicodeError):
+                 self.reject(400, "invalid_request")
+                 return
+             if inspection and body:
+                 try:
+                     if self.headers.get("Content-Encoding", "identity").lower() != "identity":
+                         self.reject(415, "unsupported_body")
+                         return
+                     text = body.decode("utf-8")
+                     media_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+                     if media_type == "application/json":
+                         body_inputs = strings(parse_json(text))
+                     elif media_type == "application/x-www-form-urlencoded":
+                         body_inputs = form_values(text)
+                     elif media_type == "text/plain":
+                         body_inputs = [text]
+                     else:
+                         self.reject(415, "unsupported_body")
+                         return
+                     inputs = inputs[:-1] + body_inputs
+                 except (ValueError, UnicodeError):
+                     self.reject(400, "invalid_request")
                      return
-                 self.send_response(response.status)
-                 for name in ("Content-Type", "X-Request-Id"):
-                     if name in response.headers:
-                         self.send_header(name, response.headers[name])
-                 for name, value in score_headers.items():
-                     self.send_header(name, value)
-                 if matched_rule:
-                     self.send_header("X-Firewall-Match", matched_rule)
-                 self.send_header("Content-Length", str(len(data)))
-                 self.end_headers()
-                 self.wfile.write(data)
-
-     ThreadingHTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
+             if policy.get("normalization"):
+                 inputs = [canonical(value) for value in inputs]
++            rate = policy.get("rate_limit")
++            if rate and ("paths" not in rate or decoded_path in rate["paths"]):
++                now = time.monotonic()
++                with bucket_lock:
++                    expired = [key for key, (start, _) in buckets.items()
++                               if now - start >= rate["window_seconds"]]
++                    for key in expired:
++                        del buckets[key]
++                    key = self.client_address[0]
++                    start, count = buckets.get(key, (now, 0))
++                    if count >= rate["requests"]:
++                        retry = max(1, math.ceil(rate["window_seconds"] - (now - start)))
++                    else:
++                        buckets[key] = (start, count + 1)
++                        retry = 0
++                if retry:
++                    self.reject(429, "rate_limit", {"Retry-After": retry})
++                    return
+             match = next((rule["id"] for rule in policy.get("denylist", [])
+                           if any(rule["term"] in value for value in inputs)), None)
+             heuristic = policy.get("heuristics")
+             signals = [signal for signal in (heuristic or {}).get("signals", [])
+                        if any(re.search(signal["pattern"], value) for value in inputs)]
+             score = sum(signal["weight"] for signal in signals)
+             if heuristic:
+                 diagnostics["X-WAF-Score"] = str(score)
+                 if signals:
+                     diagnostics["X-WAF-Signals"] = ",".join(signal["id"] for signal in signals)
+                 if not match and score >= heuristic["threshold"]:
+                     match = "heuristic_score"
+             classifier = policy.get("classifier")
+             ml_score = None
+             if classifier:
+                 try:
+                     request = urllib.request.Request(args.detector.rstrip("/") + "/classify",
+                         data=json.dumps({"inputs": inputs}).encode(),
+                         headers={"Content-Type": "application/json"}, method="POST")
+                     with opener.open(request, timeout=0.2) as response:
+                         if response.status != 200:
+                             raise ValueError("Unavailable classifier")
+                         result = json.loads(response.read())
+                     if not isinstance(result, dict) or type(result.get("score")) is not int:
+                         raise ValueError("Invalid classifier score")

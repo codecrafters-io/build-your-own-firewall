@@ -1,0 +1,80 @@
+{
+  "mode": "block",
+  "normalization": true,
+  "inspect_headers": [
+    "X-Search"
+  ],
+  "denylist": [
+    {
+      "id": "sql-union",
+      "term": "union select"
+    },
+    {
+      "id": "xss-script",
+      "term": "<script"
+    }
+  ],
+  "heuristics": {
+    "threshold": 5,
+    "signals": [
+      {
+        "id": "sql-or",
+        "pattern": "or\\s+1\\s*=\\s*1",
+        "weight": 3
+      },
+      {
+        "id": "sql-comment",
+        "pattern": "--",
+        "weight": 2
+      }
+    ]
+  },
+  "classifier": {
+    "threshold": 70
+  },
+  "decisions": {
+    "default": {
+      "ml_high": 90,
+      "ml_medium": 60,
+      "heuristic_high": 5,
+      "heuristic_medium": 3
+    },
+    "routes": [
+      {
+        "path": "/articles",
+        "ml_high": 99,
+        "ml_medium": 95,
+        "heuristic_high": 8,
+        "heuristic_medium": 5
+      }
+    ]
+  },
+  "inspection": {
+    "max_body_bytes": 4096
+  },
+  "rate_limit": {
+    "requests": 3,
+    "window_seconds": 2,
+    "paths": [
+      "/login"
+    ]
+  },
+  "response": {
+    "max_bytes": 65536,
+    "deny_patterns": [
+      "INTERNAL_KEY_[A-Z0-9]+"
+    ]
+  },
+  "virtual_patches": [
+    {
+      "id": "export-fields",
+      "method": "POST",
+      "path": "/api/export",
+      "argument": "fields",
+      "allowed_values": [
+        "customer_id",
+        "name"
+      ]
+    }
+  ]
+}

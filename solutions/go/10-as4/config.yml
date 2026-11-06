@@ -1,23 +1,7 @@
 hints:
-  - title_markdown: "Where should I authorize a non-streaming tool call?"
-    body_markdown: |-
-      Extend the buffered response modifier after the existing canary check.
-      Parse choices[].message.tool_calls and check every call before forwarding
-      the body. Look up its exact function name in the policy map. Decode its
-      arguments string into map[string]json.RawMessage, requiring a non-null JSON
-      object. Keep the original response bytes when all checks pass.
-  - title_markdown: "How do I check a URL without substring bypasses?"
-    body_markdown: |-
-      Read the configured argument key as a string, reject whitespace, control
-      characters and backslashes, then use url.Parse. Require HTTP(S), a hostname,
-      and no User information. Validate any port, then compare Hostname() against
-      allowed_hosts using case-insensitive exact equality. Host includes the port
-      and is not the value you want. Do not search the raw URL for an allowed name.
-  - title_markdown: "How do I prevent a streamed action from escaping early?"
-    body_markdown: |-
-      Keep a map from tool-call index to accumulated fields. Append name and
-      argument fragments independently for each index. At [DONE], sort the indices,
-      check the assembled calls for the canary, and authorize the entire batch.
-      Only then emit complete tool-call deltas and [DONE]. On any failure, emit
-      one error and discard every buffered call. Continue releasing safe content
-      through the earlier text holdback while tool calls accumulate.
+  - title_markdown: How do I avoid leaking bytes before a denial?
+    body_markdown:
+      Read and check the bounded origin body before calling WriteHeader or
+      Write. Inspect raw text and decoded JSON strings; Decoder.Token can visit
+      escaped strings even when object keys repeat. If safe, copy the original
+      bytes and allowed headers. If denied, build a fresh response.

@@ -1,134 +1,67 @@
-@@ -103,111 +103,130 @@
-     def classify(message):
-         request = urllib.request.Request(
-             endpoint.rstrip("/") + "/classify",
-             data=json.dumps(message, ensure_ascii=False).encode("utf-8"),
-             headers={"Content-Type": "application/json"},
-             method="POST",
-         )
-         with opener.open(request, timeout=0.2) as response:
-             if response.status != 200:
-                 raise ValueError("Classifier did not return HTTP 200")
-             score = json.loads(response.read())["score"]
-             if type(score) is not int or not 0 <= score <= 100:
-                 raise ValueError("Invalid classifier score")
-             return score
-
-     scores = []
-     available = True
-     for message in messages:
-         try:
-             scores.append(classify(message))
-         except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException):
-             available = False
-     return scores if available else None
-
-
-+def decision_rule(messages, message_scores, scores, settings):
-+    for (role, _), (heuristic_score, _), classifier_score in zip(messages, message_scores, scores):
-+        thresholds = settings["tool" if role == "tool" else "default"]
-+        if classifier_score >= thresholds["classifier_high"]:
-+            return "classifier_high"
-+        if (classifier_score >= thresholds["classifier_medium"]
-+                and heuristic_score >= thresholds["heuristic_medium"]):
-+            return "combined_scores"
-+    return ""
-+
-+
- def main():
-     parser = argparse.ArgumentParser()
-     parser.add_argument("--origin")
-     parser.add_argument("--detector")
-     parser.add_argument("--policy")
-     args = parser.parse_args()
-
-     with open(args.policy, encoding="utf-8") as policy_file:
-         policy = json.load(policy_file)
-
-     detector_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoDetectorRedirect())
-
-     class Handler(BaseHTTPRequestHandler):
-         def do_GET(self):
-             self.send_response(200 if self.path == "/health" else 404)
-             self.end_headers()
-
-         def do_POST(self):
-             if self.path != "/v1/chat/completions":
-                 self.send_error(404)
-                 return
-             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-             messages = inspect_messages(body)
-             if messages is None:
-                 self.send_error(400, "Could not inspect request")
-                 return
-             inspection = [
-                 candidate
-                 for _, texts in messages
-                 for text in texts
-                 for candidate in inspection_texts(text, policy.get("normalization"))
-             ]
-             matched_rule = next(
-                 (
-                     rule["id"]
-                     for rule in policy.get("denylist", [])
-                     if any(rule["term"] in text for text in inspection)
-                 ),
-                 "",
-             )
-             score_headers = {}
-             message_scores = [(0, []) for _ in messages]
-+            heuristic_score = 0
-             if "heuristics" in policy:
-                 message_scores, score, signals = score_message_heuristics(
-                     messages, policy["heuristics"], policy.get("normalization")
-                 )
-+                heuristic_score = score
-                 score_headers["X-Firewall-Score"] = str(score)
-                 if signals:
-                     score_headers["X-Firewall-Signals"] = ",".join(signals)
--                if not matched_rule and score >= policy["heuristics"]["threshold"]:
-+                if not matched_rule and "decisions" not in policy and score >= policy["heuristics"]["threshold"]:
-                     matched_rule = "heuristic_score"
-             if "classifier" in policy:
-                 scores = classify_messages(body, args.detector, detector_opener)
-                 if scores is None:
-                     score_headers["X-Firewall-Detector-Status"] = "unavailable"
-+                    if (not matched_rule and "heuristics" in policy
-+                            and heuristic_score >= policy["heuristics"]["threshold"]):
-+                        matched_rule = "heuristic_score"
-                 else:
-                     highest = max(scores, default=0)
-                     score_headers["X-Firewall-Detector-Status"] = "ok"
-                     score_headers["X-Firewall-Classifier-Score"] = str(highest)
--                    if not matched_rule and highest >= policy["classifier"]["threshold"]:
--                        matched_rule = "classifier_score"
-+                    if not matched_rule:
-+                        if "decisions" in policy:
-+                            matched_rule = decision_rule(messages, message_scores, scores, policy["decisions"])
-+                        elif highest >= policy["classifier"]["threshold"]:
-+                            matched_rule = "classifier_score"
-             if matched_rule and policy.get("mode", "block") != "log":
-                 data = json.dumps({"error": {
-                     "message": "Blocked by firewall policy",
-                     "type": "firewall_block",
-                     "rule": matched_rule,
-                 }}).encode()
-                 self.send_response(403)
-                 self.send_header("Content-Type", "application/json")
-                 self.send_header("Content-Length", str(len(data)))
-                 for name, value in score_headers.items():
-                     self.send_header(name, value)
-                 self.end_headers()
-                 self.wfile.write(data)
-                 return
-             headers = {
-                 name: self.headers[name]
-                 for name in ("Authorization", "Content-Type")
-                 if name in self.headers
-             }
-             request = urllib.request.Request(
-                 args.origin.rstrip("/") + self.path,
-                 data=body,
-                 headers=headers,
-                 method="POST",
-             )
+@@ -101,50 +101,66 @@
+                 if not match and score >= heuristic["threshold"]:
+                     match = "heuristic_score"
+             classifier = policy.get("classifier")
+             ml_score = None
+             if classifier:
+                 try:
+                     request = urllib.request.Request(args.detector.rstrip("/") + "/classify",
+                         data=json.dumps({"inputs": inputs}).encode(),
+                         headers={"Content-Type": "application/json"}, method="POST")
+                     with opener.open(request, timeout=0.2) as response:
+                         if response.status != 200:
+                             raise ValueError("Unavailable classifier")
+                         result = json.loads(response.read())
+                     if not isinstance(result, dict) or type(result.get("score")) is not int:
+                         raise ValueError("Invalid classifier score")
+                     if not 0 <= result["score"] <= 100:
+                         raise ValueError("Invalid classifier score")
+                     ml_score = result["score"]
+                 except (OSError, ValueError, urllib.error.URLError):
+                     pass
+                 diagnostics["X-WAF-Detector-Status"] = "ok" if ml_score is not None else "unavailable"
+                 if ml_score is not None:
+                     diagnostics["X-WAF-ML-Score"] = str(ml_score)
+                     if not match and ml_score >= classifier["threshold"]:
+                         match = "ml_score"
++            decisions = policy.get("decisions")
++            if decisions and ml_score is not None:
++                thresholds = decisions["default"]
++                for route in decisions.get("routes", []):
++                    if decoded_path == route["path"]:
++                        thresholds = route
++                        break
++                match = next((rule["id"] for rule in policy.get("denylist", [])
++                              if any(rule["term"] in value for value in inputs)), None)
++                if not match:
++                    if score >= thresholds["heuristic_high"]:
++                        match = "heuristic_high"
++                    elif ml_score >= thresholds["ml_high"]:
++                        match = "ml_high"
++                    elif ml_score >= thresholds["ml_medium"] and score >= thresholds["heuristic_medium"]:
++                        match = "combined_scores"
+             if match:
+                 if policy.get("mode", "block") == "block":
+                     self.reject(403, match, diagnostics)
+                     return
+                 diagnostics["X-WAF-Match"] = match
+             try:
+                 excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(self.headers.get_all("Connection", [])).split(",")}
+                 headers = {key: value for key, value in self.headers.items()
+                            if key.lower() not in excluded and key.lower() != "host"
+                            and not key.lower().startswith("x-waf-")}
+                 request = urllib.request.Request(args.origin.rstrip("/") + self.path,
+                     data=body if length or self.command in {"POST", "PUT", "PATCH"} else None,
+                     headers=headers, method=self.command)
+                 try:
+                     response = opener.open(request, timeout=3)
+                 except urllib.error.HTTPError as error:
+                     response = error
+                 with response:
+                     content = response.read()
+                     self.send_response(response.status)
+                     excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(response.headers.get_all("Connection", [])).split(",")}
+                     for key, value in response.getheaders():
+                         if key.lower() not in excluded and not key.lower().startswith("x-waf-"):
+                             self.send_header(key, value)
+                     self.send_header("Content-Length", str(len(content)))

@@ -1,239 +1,161 @@
 import argparse
-import base64
-import binascii
-import unicodedata
 import json
-import http.client
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+import re
+import unicodedata
+import urllib.parse
 
 
-def inspection_texts(text, settings):
-    if settings is None:
-        return [text]
-
-    def normalize(value):
-        for character in settings["zero_width"]:
-            value = value.replace(character, "")
-        value = unicodedata.normalize("NFKC", value).casefold()
-        return "".join(settings["homoglyphs"].get(character, character) for character in value)
-
-    candidates = [normalize(text)]
-    try:
-        decoded = base64.b64decode(text, validate=True)
-        candidates.append(normalize(decoded.decode("utf-8")))
-    except (ValueError, binascii.Error):
-        pass
-    return candidates
-
-
-def inspect_messages(body):
-    """Keep roles and text grouped by their original message index."""
-    try:
-        messages = []
-        for message in json.loads(body)["messages"]:
-            texts = []
-            content = message.get("content")
-            if isinstance(content, str):
-                texts.append(content)
-            elif isinstance(content, list):
-                for part in content:
-                    if part.get("type") != "text" or not isinstance(part.get("text"), str):
-                        return None
-                    texts.append(part["text"])
-            elif content is not None:
-                return None
-            messages.append((message.get("role"), texts))
-        return messages
-    except (ValueError, KeyError, TypeError, AttributeError):
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
         return None
 
 
-def near_terms(text, first, second, max_gap):
-    def positions(term):
-        return [index for index in range(len(text)) if text.startswith(term, index)]
-
-    for left in positions(first):
-        for right in positions(second):
-            if 0 <= right - (left + len(first)) <= max_gap:
-                return True
-            if 0 <= left - (right + len(second)) <= max_gap:
-                return True
-    return False
+HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+               "te", "trailer", "transfer-encoding", "upgrade", "content-length"}
 
 
-def score_heuristics(candidates, settings):
-    score, signals = 0, []
-    for signal in settings["signals"]:
-        for text in candidates:
-            matched = signal["term"] in text if signal["kind"] == "contains" else near_terms(
-                text, signal["term"], signal["other"], signal["max_gap"]
-            )
-            if matched:
-                score += signal["weight"]
-                signals.append(signal["id"])
-                break
-    return score, signals
+def decode_component(value, plus=False):
+    if re.search(r"%(?![0-9a-fA-F]{2})", value):
+        raise ValueError("Invalid percent escape")
+    if plus:
+        value = value.replace("+", " ")
+    return urllib.parse.unquote(value, encoding="utf-8", errors="strict")
 
 
-def score_message_heuristics(messages, settings, normalization):
-    results = []
-    seen = set()
-    for _, texts in messages:
-        candidates = [candidate for text in texts for candidate in inspection_texts(text, normalization)]
-        score, signals = score_heuristics(candidates, settings)
-        results.append((score, signals))
-        seen.update(signals)
-    signals = [signal["id"] for signal in settings["signals"] if signal["id"] in seen]
-    score = sum(signal["weight"] for signal in settings["signals"] if signal["id"] in seen)
-    return results, score, signals
+def form_values(raw):
+    values = []
+    for part in raw.split("&"):
+        if part:
+            key, _, value = part.partition("=")
+            decode_component(key, True)
+            values.append(decode_component(value, True))
+    return values
 
 
-class NoDetectorRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, request, response, code, message, headers, new_url):
-        return None
-
-
-def classify_messages(body, endpoint, opener):
-    messages = json.loads(body)["messages"]
-    if not messages:
-        return []
-
-    def classify(message):
-        request = urllib.request.Request(
-            endpoint.rstrip("/") + "/classify",
-            data=json.dumps(message, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with opener.open(request, timeout=0.2) as response:
-            if response.status != 200:
-                raise ValueError("Classifier did not return HTTP 200")
-            score = json.loads(response.read())["score"]
-            if type(score) is not int or not 0 <= score <= 100:
-                raise ValueError("Invalid classifier score")
-            return score
-
-    scores = []
-    available = True
-    for message in messages:
-        try:
-            scores.append(classify(message))
-        except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException):
-            available = False
-    return scores if available else None
+def canonical(value):
+    return unicodedata.normalize("NFKC", value).casefold()
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--origin")
-    parser.add_argument("--detector")
-    parser.add_argument("--policy")
+    parser.add_argument("--origin", required=True)
+    parser.add_argument("--detector", required=True)
+    parser.add_argument("--policy", required=True)
     args = parser.parse_args()
-
-    with open(args.policy, encoding="utf-8") as policy_file:
-        policy = json.load(policy_file)
-
-    detector_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoDetectorRedirect())
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    policy = json.loads(Path(args.policy).read_text())
 
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200 if self.path == "/health" else 404)
+        def reject(self, status, rule, diagnostics=None):
+            payload = json.dumps({"error": {"rule": rule}}).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("X-WAF-Match", rule)
+            for key, value in (diagnostics or {}).items():
+                if key.lower() != "x-waf-match":
+                    self.send_header(key, str(value))
+            self.send_header("Connection", "close")
             self.end_headers()
+            self.wfile.write(payload)
+            self.close_connection = True
 
-        def do_POST(self):
-            if self.path != "/v1/chat/completions":
-                self.send_error(404)
-                return
-            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-            messages = inspect_messages(body)
-            if messages is None:
-                self.send_error(400, "Could not inspect request")
-                return
-            inspection = [
-                candidate
-                for _, texts in messages
-                for text in texts
-                for candidate in inspection_texts(text, policy.get("normalization"))
-            ]
-            matched_rule = next(
-                (
-                    rule["id"]
-                    for rule in policy.get("denylist", [])
-                    if any(rule["term"] in text for text in inspection)
-                ),
-                "",
-            )
-            score_headers = {}
-            message_scores = [(0, []) for _ in messages]
-            if "heuristics" in policy:
-                message_scores, score, signals = score_message_heuristics(
-                    messages, policy["heuristics"], policy.get("normalization")
-                )
-                score_headers["X-Firewall-Score"] = str(score)
-                if signals:
-                    score_headers["X-Firewall-Signals"] = ",".join(signals)
-                if not matched_rule and score >= policy["heuristics"]["threshold"]:
-                    matched_rule = "heuristic_score"
-            if "classifier" in policy:
-                scores = classify_messages(body, args.detector, detector_opener)
-                if scores is None:
-                    score_headers["X-Firewall-Detector-Status"] = "unavailable"
-                else:
-                    highest = max(scores, default=0)
-                    score_headers["X-Firewall-Detector-Status"] = "ok"
-                    score_headers["X-Firewall-Classifier-Score"] = str(highest)
-                    if not matched_rule and highest >= policy["classifier"]["threshold"]:
-                        matched_rule = "classifier_score"
-            if matched_rule and policy.get("mode", "block") != "log":
-                data = json.dumps({"error": {
-                    "message": "Blocked by firewall policy",
-                    "type": "firewall_block",
-                    "rule": matched_rule,
-                }}).encode()
-                self.send_response(403)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                for name, value in score_headers.items():
-                    self.send_header(name, value)
+        def handle_request(self):
+            if self.command == "GET" and self.path == "/health":
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
                 self.end_headers()
-                self.wfile.write(data)
                 return
-            headers = {
-                name: self.headers[name]
-                for name in ("Authorization", "Content-Type")
-                if name in self.headers
-            }
-            request = urllib.request.Request(
-                args.origin.rstrip("/") + self.path,
-                data=body,
-                headers=headers,
-                method="POST",
-            )
+            diagnostics = {}
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            inputs = [self.path, body.decode("utf-8", errors="replace")]
             try:
-                response = urllib.request.urlopen(request, timeout=2)
-            except urllib.error.HTTPError as error:
-                response = error
-            except urllib.error.URLError:
-                self.send_response(502)
-                for name, value in score_headers.items():
-                    self.send_header(name, value)
-                self.end_headers()
+                raw_path, _, query = self.path.partition("?")
+                decoded_path = decode_component(raw_path)
+                if policy.get("normalization"):
+                    inputs = [decoded_path, *form_values(query)]
+                    for name in policy.get("inspect_headers", []):
+                        inputs.extend(value.encode("latin-1").decode("utf-8", errors="replace")
+                                      for value in self.headers.get_all(name, []))
+                    inputs.append(body.decode("utf-8", errors="replace"))
+            except (ValueError, UnicodeError):
+                self.reject(400, "invalid_request")
                 return
-            with response:
-                data = response.read()
-                self.send_response(response.status)
-                for name in ("Content-Type", "X-Request-Id"):
-                    if name in response.headers:
-                        self.send_header(name, response.headers[name])
-                for name, value in score_headers.items():
-                    self.send_header(name, value)
-                if matched_rule:
-                    self.send_header("X-Firewall-Match", matched_rule)
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+            if policy.get("normalization"):
+                inputs = [canonical(value) for value in inputs]
+            match = next((rule["id"] for rule in policy.get("denylist", [])
+                          if any(rule["term"] in value for value in inputs)), None)
+            heuristic = policy.get("heuristics")
+            signals = [signal for signal in (heuristic or {}).get("signals", [])
+                       if any(re.search(signal["pattern"], value) for value in inputs)]
+            score = sum(signal["weight"] for signal in signals)
+            if heuristic:
+                diagnostics["X-WAF-Score"] = str(score)
+                if signals:
+                    diagnostics["X-WAF-Signals"] = ",".join(signal["id"] for signal in signals)
+                if not match and score >= heuristic["threshold"]:
+                    match = "heuristic_score"
+            classifier = policy.get("classifier")
+            ml_score = None
+            if classifier:
+                try:
+                    request = urllib.request.Request(args.detector.rstrip("/") + "/classify",
+                        data=json.dumps({"inputs": inputs}).encode(),
+                        headers={"Content-Type": "application/json"}, method="POST")
+                    with opener.open(request, timeout=0.2) as response:
+                        if response.status != 200:
+                            raise ValueError("Unavailable classifier")
+                        result = json.loads(response.read())
+                    if not isinstance(result, dict) or type(result.get("score")) is not int:
+                        raise ValueError("Invalid classifier score")
+                    if not 0 <= result["score"] <= 100:
+                        raise ValueError("Invalid classifier score")
+                    ml_score = result["score"]
+                except (OSError, ValueError, urllib.error.URLError):
+                    pass
+                diagnostics["X-WAF-Detector-Status"] = "ok" if ml_score is not None else "unavailable"
+                if ml_score is not None:
+                    diagnostics["X-WAF-ML-Score"] = str(ml_score)
+                    if not match and ml_score >= classifier["threshold"]:
+                        match = "ml_score"
+            if match:
+                if policy.get("mode", "block") == "block":
+                    self.reject(403, match, diagnostics)
+                    return
+                diagnostics["X-WAF-Match"] = match
+            try:
+                excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(self.headers.get_all("Connection", [])).split(",")}
+                headers = {key: value for key, value in self.headers.items()
+                           if key.lower() not in excluded and key.lower() != "host"
+                           and not key.lower().startswith("x-waf-")}
+                request = urllib.request.Request(args.origin.rstrip("/") + self.path,
+                    data=body if length or self.command in {"POST", "PUT", "PATCH"} else None,
+                    headers=headers, method=self.command)
+                try:
+                    response = opener.open(request, timeout=3)
+                except urllib.error.HTTPError as error:
+                    response = error
+                with response:
+                    content = response.read()
+                    self.send_response(response.status)
+                    excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(response.headers.get_all("Connection", [])).split(",")}
+                    for key, value in response.getheaders():
+                        if key.lower() not in excluded and not key.lower().startswith("x-waf-"):
+                            self.send_header(key, value)
+                    self.send_header("Content-Length", str(len(content)))
+                    for key, value in diagnostics.items():
+                        self.send_header(key, value)
+                    self.end_headers()
+                    self.wfile.write(content)
+            except (OSError, urllib.error.URLError):
+                self.reject(502, "origin_unavailable", diagnostics)
+
+        do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request
 
     ThreadingHTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
 

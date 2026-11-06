@@ -2,401 +2,293 @@ package main
 
 import (
 	"bytes"
-	"context"
-	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 	"io"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"golang.org/x/text/cases"
-	"golang.org/x/text/unicode/norm"
 )
 
-type normalizationPolicy struct {
-	ZeroWidth  []string          `json:"zero_width"`
-	Homoglyphs map[string]string `json:"homoglyphs"`
-}
+var hop = map[string]bool{"Connection": true, "Keep-Alive": true, "Proxy-Authenticate": true,
+	"Proxy-Authorization": true, "Te": true, "Trailer": true, "Transfer-Encoding": true,
+	"Upgrade": true, "Content-Length": true}
 
-func inspectionTexts(text string, settings *normalizationPolicy) []string {
-	if settings == nil {
-		return []string{text}
+func copyHeaders(destination, source http.Header) {
+	excluded := map[string]bool{}
+	for _, name := range strings.Split(strings.Join(source.Values("Connection"), ","), ",") {
+		excluded[http.CanonicalHeaderKey(strings.TrimSpace(name))] = true
 	}
-	normalize := func(value string) string {
-		for _, character := range settings.ZeroWidth {
-			value = strings.ReplaceAll(value, character, "")
-		}
-		value = cases.Fold().String(norm.NFKC.String(value))
-		var result strings.Builder
-		for _, character := range value {
-			if replacement, ok := settings.Homoglyphs[string(character)]; ok {
-				result.WriteString(replacement)
-			} else {
-				result.WriteRune(character)
-			}
-		}
-		return result.String()
-	}
-	candidates := []string{normalize(text)}
-	decoded, err := base64.StdEncoding.DecodeString(text)
-	if err == nil && utf8.Valid(decoded) {
-		candidates = append(candidates, normalize(string(decoded)))
-	}
-	return candidates
-}
-
-type inspectedMessage struct {
-	Role           string
-	Texts          []string
-	HeuristicScore int
-	Signals        []string
-}
-
-// Keep roles and text grouped by their original message index.
-func inspectMessages(body []byte) ([]inspectedMessage, bool) {
-	var request struct {
-		Messages []struct {
-			Role    string          `json:"role"`
-			Content json.RawMessage `json:"content"`
-		} `json:"messages"`
-	}
-	if json.Unmarshal(body, &request) != nil || request.Messages == nil {
-		return nil, false
-	}
-	var messages []inspectedMessage
-	for _, message := range request.Messages {
-		current := inspectedMessage{Role: message.Role}
-		if len(message.Content) == 0 || string(message.Content) == "null" {
-			messages = append(messages, current)
+	for key, values := range source {
+		if hop[key] || excluded[key] || strings.HasPrefix(strings.ToLower(key), "x-waf-") {
 			continue
 		}
-		var text string
-		if json.Unmarshal(message.Content, &text) == nil {
-			current.Texts = []string{text}
-			messages = append(messages, current)
-			continue
-		}
-		var parts []struct {
-			Type string  `json:"type"`
-			Text *string `json:"text"`
-		}
-		if json.Unmarshal(message.Content, &parts) != nil {
-			return nil, false
-		}
-		for _, part := range parts {
-			if part.Type != "text" || part.Text == nil {
-				return nil, false
+		destination[key] = append([]string(nil), values...)
+	}
+}
+
+func reject(w http.ResponseWriter, status int, rule string, diagnostics http.Header) {
+	for key, values := range diagnostics {
+		w.Header()[key] = values
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-WAF-Match", rule)
+	w.Header().Set("Connection", "close")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"rule": rule}})
+}
+
+type Rule struct {
+	ID   string `json:"id"`
+	Term string `json:"term"`
+}
+type Policy struct {
+	Mode           string      `json:"mode"`
+	Denylist       []Rule      `json:"denylist"`
+	Normalization  bool        `json:"normalization"`
+	InspectHeaders []string    `json:"inspect_headers"`
+	Heuristics     *Heuristics `json:"heuristics"`
+	Classifier     *Classifier `json:"classifier"`
+	Decisions      *Decisions  `json:"decisions"`
+}
+
+func literalMatch(policy Policy, inputs []string) string {
+	for _, rule := range policy.Denylist {
+		for _, value := range inputs {
+			if strings.Contains(value, rule.Term) {
+				return rule.ID
 			}
-			current.Texts = append(current.Texts, *part.Text)
-		}
-		messages = append(messages, current)
-	}
-	return messages, true
-}
-
-type heuristicSignal struct {
-	ID     string `json:"id"`
-	Weight int    `json:"weight"`
-	Kind   string `json:"kind"`
-	Term   string `json:"term"`
-	Other  string `json:"other"`
-	MaxGap int    `json:"max_gap"`
-}
-
-type heuristicPolicy struct {
-	Threshold int               `json:"threshold"`
-	Signals   []heuristicSignal `json:"signals"`
-}
-
-// nearTerms checks all non-overlapping occurrences in either order.
-func nearTerms(text, first, second string, maxGap int) bool {
-	positions := func(term string) []int {
-		var found []int
-		for start := 0; start <= len(text)-len(term); start++ {
-			if strings.HasPrefix(text[start:], term) {
-				found = append(found, start)
-			}
-		}
-		return found
-	}
-	for _, left := range positions(first) {
-		for _, right := range positions(second) {
-			if end := left + len(first); end <= right && utf8.RuneCountInString(text[end:right]) <= maxGap {
-				return true
-			}
-			if end := right + len(second); end <= left && utf8.RuneCountInString(text[end:left]) <= maxGap {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func scoreHeuristics(candidates []string, settings *heuristicPolicy) (int, []string) {
-	score := 0
-	var signals []string
-	for _, signal := range settings.Signals {
-		for _, text := range candidates {
-			matched := signal.Kind == "contains" && strings.Contains(text, signal.Term)
-			if signal.Kind == "near" {
-				matched = nearTerms(text, signal.Term, signal.Other, signal.MaxGap)
-			}
-			if matched {
-				score += signal.Weight
-				signals = append(signals, signal.ID)
-				break
-			}
-		}
-	}
-	return score, signals
-}
-
-// Retain message results and count each signal once in the request summary.
-func scoreMessageHeuristics(messages []inspectedMessage, settings *heuristicPolicy, normalization *normalizationPolicy) (int, []string) {
-	seen := map[string]bool{}
-	for index, message := range messages {
-		var candidates []string
-		for _, text := range message.Texts {
-			candidates = append(candidates, inspectionTexts(text, normalization)...)
-		}
-		score, signals := scoreHeuristics(candidates, settings)
-		messages[index].HeuristicScore = score
-		messages[index].Signals = signals
-		for _, id := range signals {
-			seen[id] = true
-		}
-	}
-	score := 0
-	var signals []string
-	for _, signal := range settings.Signals {
-		if seen[signal.ID] {
-			score += signal.Weight
-			signals = append(signals, signal.ID)
-		}
-	}
-	return score, signals
-}
-
-type classifierPolicy struct {
-	Threshold int `json:"threshold"`
-}
-
-// Keep each result associated with its message for later decision rules.
-func classifyMessages(ctx context.Context, endpoint string, body []byte) ([]int, bool) {
-	var request struct {
-		Messages []json.RawMessage `json:"messages"`
-	}
-	if json.Unmarshal(body, &request) != nil {
-		return nil, false
-	}
-	client := &http.Client{
-		Transport:     &http.Transport{},
-		Timeout:       200 * time.Millisecond,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	defer client.CloseIdleConnections()
-	scores := make([]int, len(request.Messages))
-	available := true
-	for index, message := range request.Messages {
-		score, ok := classifyMessage(ctx, client, endpoint, message)
-		scores[index] = score
-		available = available && ok
-	}
-	return scores, available
-}
-
-func classifyMessage(ctx context.Context, client *http.Client, endpoint string, message json.RawMessage) (int, bool) {
-	outgoing, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(endpoint, "/")+"/classify", bytes.NewReader(message))
-	if err != nil {
-		return 0, false
-	}
-	outgoing.Header.Set("Content-Type", "application/json")
-	response, err := client.Do(outgoing)
-	if err != nil {
-		return 0, false
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return 0, false
-	}
-	data, err := io.ReadAll(response.Body)
-	if err != nil {
-		return 0, false
-	}
-	var result struct {
-		Score *int `json:"score"`
-	}
-	if json.Unmarshal(data, &result) != nil || result.Score == nil || *result.Score < 0 || *result.Score > 100 {
-		return 0, false
-	}
-	return *result.Score, true
-}
-
-type scoreThresholds struct {
-	ClassifierHigh   int `json:"classifier_high"`
-	ClassifierMedium int `json:"classifier_medium"`
-	HeuristicMedium  int `json:"heuristic_medium"`
-}
-
-type decisionPolicy struct {
-	Default scoreThresholds `json:"default"`
-	Tool    scoreThresholds `json:"tool"`
-}
-
-func decisionRule(messages []inspectedMessage, scores []int, settings *decisionPolicy) string {
-	for index, message := range messages {
-		thresholds := settings.Default
-		if message.Role == "tool" {
-			thresholds = settings.Tool
-		}
-		if scores[index] >= thresholds.ClassifierHigh {
-			return "classifier_high"
-		}
-		if scores[index] >= thresholds.ClassifierMedium && message.HeuristicScore >= thresholds.HeuristicMedium {
-			return "combined_scores"
 		}
 	}
 	return ""
 }
 
-func main() {
-	origin := flag.String("origin", "", "Origin chat completions API URL")
-	detector := flag.String("detector", "", "Classifier service URL")
-	policyPath := flag.String("policy", "", "Policy JSON file path")
-	flag.Parse()
-
-	var policy struct {
-		Decisions     *decisionPolicy      `json:"decisions"`
-		Classifier    *classifierPolicy    `json:"classifier"`
-		Heuristics    *heuristicPolicy     `json:"heuristics"`
-		Normalization *normalizationPolicy `json:"normalization"`
-		Mode          string               `json:"mode"`
-		Denylist      []struct {
-			ID   string `json:"id"`
-			Term string `json:"term"`
-		} `json:"denylist"`
+func formValues(raw string) ([]string, error) {
+	values := []string{}
+	for _, part := range strings.Split(raw, "&") {
+		if part == "" {
+			continue
+		}
+		key, value, _ := strings.Cut(part, "=")
+		decodedKey, err := url.QueryUnescape(key)
+		if err != nil || !utf8.ValidString(decodedKey) {
+			return nil, fmt.Errorf("invalid query key")
+		}
+		decoded, err := url.QueryUnescape(value)
+		if err != nil || !utf8.ValidString(decoded) {
+			return nil, fmt.Errorf("invalid query value")
+		}
+		values = append(values, decoded)
 	}
+	return values, nil
+}
+
+func canonical(value string) string { return cases.Fold().String(norm.NFKC.String(value)) }
+
+type Signal struct {
+	ID      string `json:"id"`
+	Pattern string `json:"pattern"`
+	Weight  int    `json:"weight"`
+}
+type Heuristics struct {
+	Threshold int      `json:"threshold"`
+	Signals   []Signal `json:"signals"`
+}
+
+func patternMatch(pattern string, inputs []string) bool {
+	expression := regexp.MustCompile(pattern)
+	for _, value := range inputs {
+		if expression.MatchString(value) {
+			return true
+		}
+	}
+	return false
+}
+
+type Classifier struct {
+	Threshold int `json:"threshold"`
+}
+
+func classify(endpoint string, inputs []string) *int {
+	client := &http.Client{Timeout: 200 * time.Millisecond,
+		Transport:     &http.Transport{DisableKeepAlives: true, DisableCompression: true},
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	defer client.CloseIdleConnections()
+	payload, _ := json.Marshal(map[string]any{"inputs": inputs})
+	response, err := client.Post(strings.TrimRight(endpoint, "/")+"/classify", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return nil
+	}
+	defer response.Body.Close()
+	data, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != 200 {
+		return nil
+	}
+	var result struct {
+		Score *int `json:"score"`
+	}
+	if json.Unmarshal(data, &result) != nil || result.Score == nil || *result.Score < 0 || *result.Score > 100 {
+		return nil
+	}
+	return result.Score
+}
+
+type Thresholds struct {
+	Path            string `json:"path"`
+	MLHigh          int    `json:"ml_high"`
+	MLMedium        int    `json:"ml_medium"`
+	HeuristicHigh   int    `json:"heuristic_high"`
+	HeuristicMedium int    `json:"heuristic_medium"`
+}
+type Decisions struct {
+	Default Thresholds   `json:"default"`
+	Routes  []Thresholds `json:"routes"`
+}
+
+func main() {
+	origin := flag.String("origin", "", "Origin web application URL")
+	detector := flag.String("detector", "", "ML detector URL")
+	policyPath := flag.String("policy", "", "Trusted policy JSON file")
+	flag.Parse()
 	data, err := os.ReadFile(*policyPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		panic(err)
 	}
+	var policy Policy
 	if err := json.Unmarshal(data, &policy); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		panic(err)
 	}
-
-	target, err := url.Parse(*origin)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	proxy := &httputil.ReverseProxy{
-		Rewrite: func(request *httputil.ProxyRequest) {
-			request.SetURL(target)
-		},
-	}
-	http.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+	client := &http.Client{Timeout: 3 * time.Second,
+		Transport:     &http.Transport{DisableCompression: true},
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.RequestURI() == "/health" {
+			w.WriteHeader(200)
 			return
 		}
-		body, err := io.ReadAll(r.Body)
+		diagnostics := http.Header{}
+		var reader io.Reader = r.Body
+		body, err := io.ReadAll(reader)
 		if err != nil {
-			http.Error(w, "Could not read request", http.StatusBadRequest)
+			reject(w, 400, "invalid_request", diagnostics)
 			return
 		}
-		messages, ok := inspectMessages(body)
-		if !ok {
-			http.Error(w, "Could not inspect request", http.StatusBadRequest)
+		inputs := []string{r.URL.RequestURI(), string(body)}
+		decodedPath := r.URL.Path
+		if !utf8.ValidString(decodedPath) {
+			reject(w, 400, "invalid_request", diagnostics)
 			return
 		}
-		var inspection []string
-		for _, message := range messages {
-			for _, text := range message.Texts {
-				inspection = append(inspection, inspectionTexts(text, policy.Normalization)...)
+		if policy.Normalization {
+			values, err := formValues(r.URL.RawQuery)
+			if err != nil {
+				reject(w, 400, "invalid_request", diagnostics)
+				return
+			}
+			inputs = []string{decodedPath}
+			inputs = append(inputs, values...)
+			for _, name := range policy.InspectHeaders {
+				inputs = append(inputs, r.Header.Values(name)...)
+			}
+			inputs = append(inputs, string(body))
+		}
+		if policy.Normalization {
+			for index, value := range inputs {
+				inputs[index] = canonical(value)
 			}
 		}
-		matchedRule := ""
-		for _, rule := range policy.Denylist {
-			for _, text := range inspection {
-				if strings.Contains(text, rule.Term) {
-					matchedRule = rule.ID
+		match := literalMatch(policy, inputs)
+		score := 0
+		fired := []string{}
+		if policy.Heuristics != nil {
+			for _, signal := range policy.Heuristics.Signals {
+				if patternMatch(signal.Pattern, inputs) {
+					score += signal.Weight
+					fired = append(fired, signal.ID)
+				}
+			}
+			diagnostics.Set("X-WAF-Score", strconv.Itoa(score))
+			if len(fired) > 0 {
+				diagnostics.Set("X-WAF-Signals", strings.Join(fired, ","))
+			}
+			if match == "" && score >= policy.Heuristics.Threshold {
+				match = "heuristic_score"
+			}
+		}
+		var mlScore *int
+		if policy.Classifier != nil {
+			mlScore = classify(*detector, inputs)
+			diagnostics.Set("X-WAF-Detector-Status", "unavailable")
+			if mlScore != nil {
+				diagnostics.Set("X-WAF-Detector-Status", "ok")
+				diagnostics.Set("X-WAF-ML-Score", strconv.Itoa(*mlScore))
+				if match == "" && *mlScore >= policy.Classifier.Threshold {
+					match = "ml_score"
+				}
+			}
+		}
+		if policy.Decisions != nil && mlScore != nil {
+			thresholds := policy.Decisions.Default
+			for _, route := range policy.Decisions.Routes {
+				if decodedPath == route.Path {
+					thresholds = route
 					break
 				}
 			}
-			if matchedRule != "" {
-				break
-			}
-		}
-		heuristicScore := 0
-		if policy.Heuristics != nil {
-			score, signals := scoreMessageHeuristics(messages, policy.Heuristics, policy.Normalization)
-			heuristicScore = score
-			w.Header().Set("X-Firewall-Score", strconv.Itoa(score))
-			if len(signals) > 0 {
-				w.Header().Set("X-Firewall-Signals", strings.Join(signals, ","))
-			}
-			if matchedRule == "" && policy.Decisions == nil && score >= policy.Heuristics.Threshold {
-				matchedRule = "heuristic_score"
-			}
-		}
-		if policy.Classifier != nil {
-			scores, available := classifyMessages(r.Context(), *detector, body)
-			if available {
-				highest := 0
-				for _, score := range scores {
-					if score > highest {
-						highest = score
-					}
-				}
-				w.Header().Set("X-Firewall-Classifier-Score", strconv.Itoa(highest))
-				w.Header().Set("X-Firewall-Detector-Status", "ok")
-				if matchedRule == "" {
-					if policy.Decisions != nil {
-						matchedRule = decisionRule(messages, scores, policy.Decisions)
-					} else if highest >= policy.Classifier.Threshold {
-						matchedRule = "classifier_score"
-					}
-				}
-			} else {
-				w.Header().Set("X-Firewall-Detector-Status", "unavailable")
-				if matchedRule == "" && policy.Heuristics != nil && heuristicScore >= policy.Heuristics.Threshold {
-					matchedRule = "heuristic_score"
+			match = literalMatch(policy, inputs)
+			if match == "" {
+				if score >= thresholds.HeuristicHigh {
+					match = "heuristic_high"
+				} else if *mlScore >= thresholds.MLHigh {
+					match = "ml_high"
+				} else if *mlScore >= thresholds.MLMedium && score >= thresholds.HeuristicMedium {
+					match = "combined_scores"
 				}
 			}
 		}
-		if matchedRule != "" {
+		if match != "" {
 			if policy.Mode != "log" {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{
-					"message": "Blocked by firewall policy", "type": "firewall_block", "rule": matchedRule,
-				}})
+				reject(w, 403, match, diagnostics)
 				return
 			}
-			w.Header().Set("X-Firewall-Match", matchedRule)
+			diagnostics.Set("X-WAF-Match", match)
 		}
-		r.Body = io.NopCloser(bytes.NewReader(body))
-		proxy.ServeHTTP(w, r)
-	})
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		request, err := http.NewRequestWithContext(r.Context(), r.Method, strings.TrimRight(*origin, "/")+r.URL.RequestURI(), bytes.NewReader(body))
+		if err != nil {
+			reject(w, 502, "origin_unavailable", diagnostics)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
+		copyHeaders(request.Header, r.Header)
+		response, err := client.Do(request)
+		if err != nil {
+			reject(w, 502, "origin_unavailable", diagnostics)
+			return
+		}
+		defer response.Body.Close()
+		var responseReader io.Reader = response.Body
+		content, err := io.ReadAll(responseReader)
+		if err != nil {
+			reject(w, 502, "origin_unavailable", diagnostics)
+			return
+		}
+		copyHeaders(w.Header(), response.Header)
+		for key, values := range diagnostics {
+			w.Header()[key] = values
+		}
+		w.WriteHeader(response.StatusCode)
+		w.Write(content)
 	})
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	server := &http.Server{Addr: "127.0.0.1:8080", Handler: handler}
+	if err := server.ListenAndServe(); err != nil {
+		os.Stderr.WriteString(err.Error() + "\n")
 		os.Exit(1)
 	}
 }

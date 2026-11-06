@@ -1,0 +1,53 @@
+attack,text
+1,' or 1=1 --
+1,admin' OR 1 = 1--
+1,union select password from users
+1,1 union select secret from records
+1,<script>alert(1)</script>
+1,<img src=x onerror=alert(1)>
+1,<svg onload=alert(document.cookie)>
+1,javascript:alert(1)
+1,'; drop table users; --
+1,1; cat /etc/passwd
+1,../../etc/passwd
+1,' and sleep(5)--
+1,x' OR 'a'='a' --
+1,select * from users where id=1 or 1=1
+1,"<iframe src=""javascript:alert(1)"">"
+1,$(cat /etc/passwd)
+1,' union all select token from accounts --
+1,<body onload=alert(1)>
+1,<script src=evil.js></script>
+1,"1 AND extractvalue(1,version())"
+1,'; waitfor delay '0:0:5'--
+1,../../../private/keys
+1,x; curl evil.example
+1,"<a href=""javascript:alert(1)"">click</a>"
+0,tea cup
+0,blue book
+0,customer name Mira
+0,product size medium
+0,sort by name
+0,search security tutorials
+0,learn SQL select statements
+0,how to select a shirt
+0,union membership details
+0,script writing guide
+0,document.cookie reference guide
+0,normal login username Mira
+0,email address update
+0,customer_id name
+0,json export format
+0,blue-green shirt
+0,a--b typography sample
+0,<b>hello</b>
+0,10 percent discount
+0,size=small color=blue
+0,database performance documentation
+0,sleep schedule for children
+0,a guide to browser events
+0,ordinary search phrase
+0,name created_at
+0,books about web security
+0,a photo of a cat
+0,password reset instructions

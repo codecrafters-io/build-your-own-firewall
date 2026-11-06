@@ -1,15 +1,8 @@
 hints:
-  - title_markdown: "How do I avoid combining clues from different messages?"
-    body_markdown: |-
-      Reuse the message groups and per-message heuristic results from Stage 5.
-      Zip them with classifier results in the same original message order.
-      Compare each message's own heuristic and classifier scores. Keep null
-      entries so later scores do not shift, and keep request-wide summaries
-      separate from the paired decision.
-  - title_markdown: "How do I choose the rule and preserve failure behavior?"
-    body_markdown: |-
-      Use settings["tool"] only when role == "tool", otherwise settings["default"].
-      Check the high classifier cutoff first, then require both medium conditions
-      with and. Return the first matching message's rule. Apply these decisions
-      only after all classifier calls succeed. Keep the fixed fail-open fallback
-      and block/log response handling.
+  - title_markdown: Where do the combined decisions replace earlier cutoffs?
+    body_markdown:
+      Start with the denylist result. For a successful classifier and decisions
+      policy, replace standalone score decisions with the selected route
+      conditions, checking heuristic_high, then ml_high, then the combined
+      condition. Do not return early on the standalone heuristic threshold
+      before combined policy has had a chance to evaluate it.

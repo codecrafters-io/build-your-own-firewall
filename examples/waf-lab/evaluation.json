@@ -1,0 +1,266 @@
+{
+  "dataset": "small synthetic held-out set; not production accuracy",
+  "training_sha256": "04dcf41609db7fad7b8ab3059e4c9604f536c69db6581aecdf250e71741ea731",
+  "totals": {
+    "rules": {
+      "attacks": 12,
+      "attacks_blocked": 3,
+      "benign": 12,
+      "benign_blocked": 2
+    },
+    "ml_cutoff": {
+      "attacks": 12,
+      "attacks_blocked": 10,
+      "benign": 12,
+      "benign_blocked": 0
+    },
+    "combined": {
+      "attacks": 12,
+      "attacks_blocked": 6,
+      "benign": 12,
+      "benign_blocked": 2
+    }
+  },
+  "observations": [
+    {
+      "text": "id=7' OR 1=1--",
+      "attack": true,
+      "score": 86,
+      "blocked": {
+        "rules": true,
+        "ml_cutoff": true,
+        "combined": true
+      }
+    },
+    {
+      "text": "q=UNION SELECT api_key FROM customers",
+      "attack": true,
+      "score": 72,
+      "blocked": {
+        "rules": true,
+        "ml_cutoff": true,
+        "combined": true
+      }
+    },
+    {
+      "text": "<script>fetch(\"/private\")</script>",
+      "attack": true,
+      "score": 90,
+      "blocked": {
+        "rules": true,
+        "ml_cutoff": true,
+        "combined": true
+      }
+    },
+    {
+      "text": "<img onerror=alert(document.domain)>",
+      "attack": true,
+      "score": 87,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": true,
+        "combined": false
+      }
+    },
+    {
+      "text": "../../../../etc/shadow",
+      "attack": true,
+      "score": 78,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": true,
+        "combined": false
+      }
+    },
+    {
+      "text": "name=x' and sleep(9)--",
+      "attack": true,
+      "score": 74,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": true,
+        "combined": false
+      }
+    },
+    {
+      "text": "q=javascript:alert(document.cookie)",
+      "attack": true,
+      "score": 95,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": true,
+        "combined": true
+      }
+    },
+    {
+      "text": "x' union all select password_hash from records",
+      "attack": true,
+      "score": 98,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": true,
+        "combined": true
+      }
+    },
+    {
+      "text": "$(curl private.example)",
+      "attack": true,
+      "score": 81,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": true,
+        "combined": false
+      }
+    },
+    {
+      "text": "<svg/onload=alert(9)>",
+      "attack": true,
+      "score": 94,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": true,
+        "combined": true
+      }
+    },
+    {
+      "text": "export password_hash",
+      "attack": true,
+      "score": 27,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "1 or true",
+      "attack": true,
+      "score": 49,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "red ceramic mug",
+      "attack": false,
+      "score": 25,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "how SQL injection works",
+      "attack": false,
+      "score": 11,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "select a name for a child",
+      "attack": false,
+      "score": 3,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "union select documentation example",
+      "attack": false,
+      "score": 34,
+      "blocked": {
+        "rules": true,
+        "ml_cutoff": false,
+        "combined": true
+      }
+    },
+    {
+      "text": "<script> example in a security article",
+      "attack": false,
+      "score": 38,
+      "blocked": {
+        "rules": true,
+        "ml_cutoff": false,
+        "combined": true
+      }
+    },
+    {
+      "text": "learn about onerror browser events",
+      "attack": false,
+      "score": 14,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "customer_id",
+      "attack": false,
+      "score": 9,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "Mira books",
+      "attack": false,
+      "score": 10,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "ordinary login",
+      "attack": false,
+      "score": 12,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "export customer_id name",
+      "attack": false,
+      "score": 1,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "a--b separator",
+      "attack": false,
+      "score": 13,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    },
+    {
+      "text": "fresh green tea",
+      "attack": false,
+      "score": 11,
+      "blocked": {
+        "rules": false,
+        "ml_cutoff": false,
+        "combined": false
+      }
+    }
+  ]
+}

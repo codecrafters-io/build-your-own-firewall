@@ -1,14 +1,8 @@
 hints:
-  - title_markdown: "How do I classify the conversation?"
-    body_markdown: |-
-      Decode messages into []json.RawMessage and send each object to `/classify`
-      in a loop. Sequential calls are sufficient. Keep scores in message order,
-      use their maximum for this stage, and keep the original request bytes for
-      forwarding. Do not copy the origin's Authorization header.
-  - title_markdown: "How do I validate scores and handle errors?"
-    body_markdown: |-
-      Set http.Client.Timeout to 200*time.Millisecond and disable redirects.
-      Require HTTP 200. Read the body and unmarshal into a struct with Score *int
-      so a missing score differs from zero. Reject scores outside 0..100.
-      If any call fails, discard classifier scores and use the earlier denylist
-      and heuristic decision. Report unavailable without a score header.
+  - title_markdown: How do I keep the detector deadline and fallback correct?
+    body_markdown:
+      Use a separate http.Client with a 200 ms Timeout and redirects disabled.
+      Decode score as *int so missing and null values remain distinguishable
+      from zero. Reject non-200 or malformed replies. Represent failure
+      separately from a score so a failed call cannot accidentally become score
+      zero.

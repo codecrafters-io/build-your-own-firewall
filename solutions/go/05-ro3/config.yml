@@ -1,15 +1,7 @@
 hints:
-  - title_markdown: "How should I find nearby terms?"
-    body_markdown: |-
-      Collect every occurrence of both terms using `strings.HasPrefix` while
-      scanning the candidate. For each pair, check both orders, exclude overlaps,
-      and count the intervening Unicode characters with `utf8.RuneCountInString`.
-      Byte offsets can locate substrings, but byte lengths are not character gaps.
-  - title_markdown: "How do I keep message scores and summarize the request?"
-    body_markdown: |-
-      Keep one entry per original message, including its role and text strings.
-      Run the signal matcher independently for each entry and retain its score
-      and fired IDs. Null content keeps a zero-score entry. Build a union of
-      fired IDs, then sum their policy weights once for the request summary.
-      Do not sum message scores: the same signal may fire in several messages.
-      Keep the existing score headers and denylist precedence.
+  - title_markdown: How do I avoid counting one signal repeatedly?
+    body_markdown:
+      Evaluate each signal against all separate inputs. As soon as any input
+      matches its regexp, add that signal ID and weight once. Continue
+      evaluating the other signals even after finding a denylist match so the
+      diagnostics remain complete.

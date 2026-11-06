@@ -1,151 +1,139 @@
-# AI Firewall base-course design and review
+# Inbound WAF course design and rubric review
 
-This record consolidates the approved Google Doc, the stage-by-stage authoring
-requests, and the implementation decisions in the individual design records. It
-records the course as implemented rather than claiming a new design sign-off.
-The request to fix the compliance audit authorizes the documentation and release
-work listed here.
+The current course follows the request to convert the former AI gateway into an
+inbound web application firewall with ML detection, then review every stage
+against the supplied teaching rubric. The course slug and stage IDs remain
+stable identifiers. Earlier `base-NN-*.md` design records describe the retired
+AI gateway exercises; they are historical, not contracts for this course.
 
-## Metadata and end state
+## Architecture and scope
 
-- Course: `firewall`, displayed as **Build your own AI Firewall**.
-- Axis: capabilities added to one HTTP inspection and authorization pipeline.
-- Scope: eleven base stages, with Go and Python solutions and hints.
-- Source: [approved course design][design], HTTP and OpenAI-compatible protocol
-  contracts, Cloudflare documentation, and OWASP guidance linked below and in
-  each stage's design record.
+```text
+External HTTP client -> Learner WAF -> Protected web application
+                              |
+                              +----> Trusted ML detector
+```
 
-The finished learner program proxies chat completions, checks original messages,
-redacts supplied sensitive patterns, inspects outgoing text and streamed tool
-calls, and denies exports of private tool-result values unless trusted policy
-allows the tool and destination. The final example blocks a base64 customer
-record sent through an otherwise allowed browsing host. Exporting the same
-record through the configured CRM email tool succeeds.
+The origin is an ordinary HTTP application. Detection inputs come from HTTP
+paths, query values, selected headers, and supported request bodies. The
+detector scores one request's inspection inputs; it is not the protected
+application. Request denials happen before forwarding. Response denials happen
+after origin processing and do not roll back side effects.
 
-## Stage table
+The base course supports GET, POST, PUT, PATCH, DELETE, complete uncompressed
+responses, and request bodies framed with a valid Content-Length. It
+deliberately excludes request smuggling, upgrades, compressed/multipart/chunked
+request parsing, distributed counters, and complete production attack coverage.
+Unsupported nonempty bodies are rejected once structured inspection is
+configured.
 
-| #   | Slug  | Stage                           | Difficulty  | New learner behavior                                   | Tester assertions                                                                         | New harness                                              |
-| --- | ----- | ------------------------------- | ----------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| 1   | `fi6` | Bind to a port                  | `very_easy` | Serve HTTP health checks                               | Two successful checks on port 8080, bounded startup, persistent process                   | Process lifecycle and health polling                     |
-| 2   | `tf0` | Proxy the API                   | `easy`      | Forward chat completions                               | Preserve requests and responses, relay origin errors, return 502 on transport failure     | Mock origin, official SDK, raw traffic capture           |
-| 3   | `kg7` | Block and log                   | `easy`      | Apply a supplied literal denylist                      | Block before origin traffic, report matched rules, forward log-mode matches               | Policy runner, origin recorder, denial checks            |
-| 4   | `wt4` | Defeat evasion                  | `medium`    | Inspect normalized and once-decoded text               | Catch configured disguises, respect decoding bounds, preserve forwarded bytes             | Unicode and base64 probes                                |
-| 5   | `ro3` | Score with heuristics           | `medium`    | Retain message signals and summarize their union       | Count signals once, apply proximity rules, report score categories and signal IDs         | Heuristic header checks                                  |
-| 6   | `xd5` | Call the classifier             | `medium`    | Consult a fallible classifier adapter                  | Classify original messages, apply a cutoff, fall back to existing rules                   | Synthetic classifier and timing checks                   |
-| 7   | `si3` | Combine detection signals       | `medium`    | Combine scores within each message                     | Use supplied role-sensitive thresholds, preserve score association and fallback behavior  | Decision-boundary and correlation probes                 |
-| 8   | `qe5` | Redact secrets and detect leaks | `medium`    | Complete input-redaction and output-canary checkpoints | Redact with request-local placeholders, block outgoing canaries, preserve clean responses | DLP request and response checks                          |
-| 9   | `ou9` | Inspect streams                 | `medium`    | Inspect incremental SSE content                        | Catch split canaries, terminate denied streams, release safe text promptly                | Fragmented SSE origin, wire parser, latency checks       |
-| 10  | `as4` | Guard tool calls                | `hard`      | Authorize complete outgoing actions                    | Check names and parsed destinations, preserve approved calls, withhold denied batches     | Tool fragments and official SDK accumulator              |
-| 11  | `mu9` | Stop the exfiltration           | `hard`      | Authorize private-value exports                        | Resolve producing call IDs, require approved exports, block the streamed finale           | Private history fixtures and synthetic replay scoreboard |
+## Stage-by-stage rubric audit
 
-Every stage adds behavior that the preceding solution lacks. Earlier solutions
-are deliberately exercised against new stages to verify that distinction.
-Difficulty starts with a small server task, advances one tier at a time, and has
-two hard final stages. The individual `base-NN-slug.md` design records retain
-the full assertion lists, source inventories, alternatives, and verification
-evidence.
+Every lesson starts with exactly one goal sentence and one motivation paragraph.
+Observable requirements remain in the main lesson, including status codes,
+decision priority, boundaries, policy fields, and preservation. Essential domain
+concepts are supplemented with diagrams, wire examples, or tables.
+Implementation approaches are in the language hints; caveats and external
+sources are in notes.
 
-## Fidelity and validation decisions
+| Stage                           | Tease and motivation                                      | Define: observable outcome                                                               | Essential supplement                          | Hint / note placement                                                                    |
+| ------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 1. Bind to a port               | Make availability observable before proxying              | Repeated local HTTP 200 health checks within five seconds                                | Client/WAF/origin diagram and flag roles      | Server APIs in hints; temporary working directory in notes                               |
+| 2. Proxy web requests           | Preserve legitimate traffic before enforcement            | Original method, target, bytes, status, and end-to-end headers; 502 on transport failure | Reverse proxy and connection-header ownership | Library errors in hints; HTTP subset and specs in notes                                  |
+| 3. Block and log                | Stop matching attacks before the application              | Rule-named 403, log-mode forwarding, clean request isolation                             | Decision table and exact error shape          | Inspection copies in hints; literal-rule limits in notes                                 |
+| 4. Normalize request inputs     | Close a specified representation gap                      | Once-decoded fields and NFKC/case-folded inspection; original forwarding                 | Source-to-input table and one-layer examples  | Language decoding functions in hints; representation limits in notes                     |
+| 5. Score attack signals         | Combine several weak indicators                           | Distinct-signal sum, inclusive cutoff, complete diagnostics                              | Worked score table                            | Deduplication strategy in hints; regex subset and CRS source in notes                    |
+| 6. Add ML detection             | Integrate a useful but fallible signal                    | One validated score call, 200 ms deadline, visible failure fallback                      | Request/reply examples and outcome headers    | HTTP timeout/validation techniques in hints; supplied-model limits in notes              |
+| 7. Tune detection decisions     | Reduce a specified false positive without a global bypass | Exact-route thresholds, a rule-only floor, and explicit fallback precedence              | Score/route decision table                    | Replacement of old cutoffs in hints; path/inspection distinction in notes                |
+| 8. Inspect request bodies       | Inspect what parsers consume without unbounded reads      | Recursive JSON values, forms, inclusive byte bound, 400/413/415 errors                   | Media-type and failure tables                 | Strict parsing in hints; unsupported encodings and specs in notes                        |
+| 9. Rate limit clients           | Protect endpoints from individually valid bursts          | Atomic peer-IP window, 429, Retry-After, health exemption                                | Fixed-window example                          | Synchronization and monotonic clocks in hints; deployment limits in notes                |
+| 10. Prevent response leaks      | Withhold secrets that appear only after origin processing | Bounded scan before release, decoded JSON strings, safe denials                          | Origin-to-client before/after example         | Buffering and duplicate-preserving parsing in hints; side effects and streaming in notes |
+| 11. Virtually patch an endpoint | Constrain a known flaw that detectors can miss            | Private-field denial and successful public-field export                                  | Exact method/path and allowed-value examples  | Independent patch parsing in hints; application authorization responsibility in notes    |
 
-This is an AI-firewall capability course with an OpenAI-compatible interface. It
-does not reproduce Cloudflare's deployment API or every production feature. The
-repository slug is retained, while the displayed course name states the
-capability actually built. `/health`, the policy JSON, `/classify`, and export
-permissions are explicit course interfaces.
+The lessons do not prescribe the learners' data structures or expose complete
+solution algorithms. Rules needed to reproduce a grader decision are not hidden
+in hints. Each new stage must distinguish the preceding-stage reference from the
+current reference.
 
-Cloudflare's injection scores run from 1 to 99 with lower values indicating
-higher risk. The course's synthetic classifier adapter runs from 0 to 100 with
-higher values indicating higher risk. This difference is stated in the lesson
-and classifier design record. Thresholds and fixture scores illustrate control
-flow, not a measurement of Cloudflare or model accuracy.
+## ML fidelity
 
-The authoring skill's real-implementation and live-model verification step is a
-**documented course-specific deviation**. The approved course supplies local
-origin and classifier mocks so learners need no model account or paid API calls.
-Deterministic responses let the tester isolate whether the learner proxies,
-blocks, redacts, or releases the supplied traffic correctly. Byte equality
-checks apply to scripted protocol payloads and forwarding preservation, not a
-live model's chosen wording. No live-model fidelity verification is claimed.
+The optional lab supplies actual inference from a frozen character-trigram
+logistic-regression classifier. Its training script reads only `training.csv`;
+model metadata records that file's checksum. The held-out set and report are
+separate. The observed evaluation retains missed attacks and false positives,
+including the sample combined policy's poorer result than ML alone. No general
+accuracy improvement is claimed.
 
-The top-level tester launcher names an external `ai-firewall` executable as an
-optional integration target. It is not an independently verified product oracle.
-The checked-in references, official SDK client, raw HTTP/SSE observations, and
-actual Go/Python learner platform runs supply the current verification evidence.
-A live-model or deployed-product integration study remains separate work. The
-synthetic replay reports only its 25 attack and 15 benign course conversations.
+The grader uses scripted detector responses to exercise valid scores, invalid
+values, non-200 statuses, redirect handling, timeouts, route decisions, and
+outage fallback reproducibly. Those integration fixtures are not model-quality
+evidence. Scores use a course-specific 0-100 higher-is-riskier convention.
+Cloudflare's production attack score uses a different convention.
 
-## Recommendations with deliberate exceptions
+## Implementation and migration
 
-The review skill distinguishes MUST requirements from SHOULD defaults. Long
-lessons and more than four API probes are deliberate departures from the latter.
-Later lessons specify JSON-inside-JSON, per-message score association, query
-parsing, or stream release rules that must be explicit to remain independently
-implementable. Small probes isolate separate parsing, authorization,
-preservation, and recovery failures. They use local mocks and do not add model
-round trips.
+Go and Python solutions are cumulative implementations of the same externally
+defined contract. Starter and solution READMEs use the inbound architecture. The
+final reference policy includes all controls; later-stage policies can omit
+optional capabilities to preserve earlier behavior.
 
-The private-export finale and its 40-conversation replay were part of the
-approved course design. The replay is not an additional learner algorithm. The
-tester computes its scoreboard from verified client outcomes. Further
-configuration and streaming controls are counted separately. Per-stage records
-explain the case counts and scope decisions. Learner feedback may justify
-reducing prose or splitting capabilities later, but coverage is not removed to
-meet a case quota.
+The active sibling tester entry point uses `internal/waf`. The older `internal`
+AI gateway package and fixtures are retained during this migration to preserve
+existing uncommitted work; they are not a fallback for the active course. A
+future cleanup can remove that historical package after the migration is
+committed. The tester release must be updated before this new curriculum can run
+against the public hosted grader.
 
-Source documentation inventories are recorded per stage. Production classifier
-calibration, authentication deployment, DNS and redirect enforcement, paraphrase
-tracking, recursive decoding, and a general policy language are outside scope.
-Private export matching is bounded value matching, not full taint tracking.
+## Verification
 
-## Compliance follow-up
+Verification covers course schema and stage mappings, language-specific hints,
+parseable policy examples, formatted materials, generated starter consistency,
+cumulative reference acceptance, preceding-stage rejection, actual local lab
+requests, model provenance, and a reproducible held-out report. Exact commands
+and outcomes from this pass are recorded below once complete. Hosted CI and the
+hosted prose checker require a subsequent run against the coordinated course and
+tester changes; no hosted result is implied by local checks.
 
-The audit uses course-skills revision `51c864409d415b21c56fc0634ebc166fb856b29d`
-and the three linked skills below.
+## Local verification results
 
-- Regenerate solution diffs with GNU diff in CI's Linux environment. The
-  previous macOS-generated hunks differed for Go's heuristic solution and
-  Python's proxy solution despite identical learner source. Final-stage diffs
-  are retained even though the current SDK compiler omits the last stage from
-  its loop.
-- Show the literal clean client response in the DLP lesson and print the actual
-  scripted response status and body in the shared tester logs.
-- Run the prose checker against all eleven lessons. The shared SDK workflow's
-  target-selection script currently produces no targets on a push, so a green
-  skipped job is not prose-review evidence. A course-wide review job explicitly
-  enumerates lesson files and retains its report.
-- Publish the tester's first release after its full regression checks. Verify
-  course CI can download that release and run both shipped languages.
+- `make test` in the sibling tester: all 22 cumulative Go/Python stage
+  references passed, all ten preceding-stage rejection checks passed, and the
+  course-stage registration check passed.
+- The grader now checks rules it previously missed: Stage 4 invalid encodings,
+  Stage 6 detector calls on denylist matches, Stage 8 invalid bodies, Stage 9
+  `Retry-After` rounding, Stage 10 escaped JSON keys, and the Stage 7
+  `heuristic_high` floor. Eleven deliberately broken Python references fail it;
+  the nine that break pre-existing rules all passed the previous grader.
+- The active tester CLI passed the Stage 11 finale and its complete
+  earlier-stage replay with both final language references.
+- The real lab application and frozen classifier were exercised with both
+  shipped final launchers: direct dummy private export reproduced, WAF private
+  export denied, public export preserved, response leak denied, and the fourth
+  login request rate-limited.
+- Four model checks passed: training checksum, held-out separation, worked
+  inference examples, and exact reproduction of the evaluation report.
+- Course schema, metadata lengths, every lesson/hint mapping, embedded JSON
+  examples, and relative document links passed local validation.
+- All 24 starter/solution READMEs match the shared template. Every one of the 22
+  GNU-generated solution diffs reconstructs its corresponding source.
+- The overview and all eleven lessons were reviewed as rendered Markdown.
+  Formatting was checked with the CI-pinned Prettier version. Generated patch
+  files are exempted from Git's indentation check because unified-diff context
+  markers precede Go tabs; the source and reconstructed patches are checked
+  separately.
 
-The first complete hosted prose review evaluated all eleven lessons against
-sixteen rules. It found one ambiguity in the block/log lesson: the valid-mode
-statement appeared to exclude the empty policy used by earlier checks. The
-lesson now states that empty policies are allowed and that supplied policies
-with rules include a valid mode. The other 175 rule evaluations passed. The same
-all-lesson workflow verifies the correction without relaxing any rules.
+The hosted prose check was not run: its API credential is not configured
+locally. The public v1 tester still implements the earlier gateway curriculum.
+Neither publishing a replacement tester nor changing the hosted course was
+performed in this pass.
 
-The tester's [v1 release][release] is published. Both public Linux archives were
-downloaded and checked against the published SHA-256 sums, including the binary,
-launcher and executable permissions. The full local suite and the tester's
-[hosted tests][tester-ci] pass. Course template generation, schema validation,
-naming and lint checks pass with Linux-generated diffs. Language and prose
-results for subsequent commits are visible in the course's Actions workflows.
+## Sources
 
-Earlier design records describe the state at each stage's completion. Their
-references to work being uncommitted or unpublished are historical statements.
-The current release and CI status is recorded by GitHub Actions and releases.
-
-[design]:
-  https://docs.google.com/document/d/1hmB4UUlX-47w43dQ5K2IPOlStJlqUSdh7LnG6PKbLeA/edit
-[create]:
-  https://github.com/codecrafters-io/course-skills/blob/51c864409d415b21c56fc0634ebc166fb856b29d/skills/create-a-new-challenge/SKILL.md
-[author]:
-  https://github.com/codecrafters-io/course-skills/blob/51c864409d415b21c56fc0634ebc166fb856b29d/skills/authoring-extensions/SKILL.md
-[review]:
-  https://github.com/codecrafters-io/course-skills/blob/51c864409d415b21c56fc0634ebc166fb856b29d/skills/reviewing-extensions/SKILL.md
-
-Review basis: [Create a New Challenge][create], [Author a Course
-Extension][author], and [Review Course Extensions][review].
-
-[release]: https://github.com/codecrafters-io/firewall-tester/releases/tag/v1
-[tester-ci]:
-  https://github.com/codecrafters-io/firewall-tester/actions/runs/41634039540
+- [HTTP semantics](https://www.rfc-editor.org/rfc/rfc9110.html) and
+  [HTTP/1.1 framing](https://www.rfc-editor.org/rfc/rfc9112.html).
+- [Unicode normalization](https://www.unicode.org/reports/tr15/) and
+  [form encoding](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).
+- [OWASP CRS anomaly scoring](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/).
+- [Cloudflare WAF attack scores](https://developers.cloudflare.com/waf/detections/attack-score/).
+- [HTTP 429](https://www.rfc-editor.org/rfc/rfc6585.html#section-4).
+- [OWASP virtual patching](https://owasp.org/www-community/Virtual_Patching_Best_Practices).

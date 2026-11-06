@@ -1,15 +1,6 @@
 hints:
-  - title_markdown: "How do I implement the proximity signal?"
-    body_markdown: |-
-      Find every index where `text.startswith(term, index)` succeeds for each
-      term. Compare every pair in both orders. The gap runs from the end of one
-      term to the start of the other and must be nonnegative and at most
-      `max_gap`. Python string lengths count Unicode code points.
-  - title_markdown: "How do I keep message scores and summarize the request?"
-    body_markdown: |-
-      Keep one entry per original message, including its role and text strings.
-      Run the signal matcher independently for each entry and retain its score
-      and fired IDs. Null content keeps a zero-score entry. Build a union of
-      fired IDs, then sum their policy weights once for the request summary.
-      Do not sum message scores: the same signal may fire in several messages.
-      Keep the existing score headers and denylist precedence.
+  - title_markdown: How do I avoid counting one signal repeatedly?
+    body_markdown:
+      For each signal, use any(re.search(pattern, value) for value in inputs).
+      Build a list of matching signals, then sum each weight once. Do not add
+      weights while looping over every occurrence of a pattern.

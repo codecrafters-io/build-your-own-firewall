@@ -1,0 +1,25 @@
+attack,text
+1,id=7' OR 1=1--
+1,q=UNION SELECT api_key FROM customers
+1,"<script>fetch(""/private"")</script>"
+1,<img onerror=alert(document.domain)>
+1,../../../../etc/shadow
+1,name=x' and sleep(9)--
+1,q=javascript:alert(document.cookie)
+1,x' union all select password_hash from records
+1,$(curl private.example)
+1,<svg/onload=alert(9)>
+1,export password_hash
+1,1 or true
+0,red ceramic mug
+0,how SQL injection works
+0,select a name for a child
+0,union select documentation example
+0,<script> example in a security article
+0,learn about onerror browser events
+0,customer_id
+0,Mira books
+0,ordinary login
+0,export customer_id name
+0,a--b separator
+0,fresh green tea

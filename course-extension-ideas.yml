@@ -1,8 +1,8 @@
-# Merge into core's data/course_extension_ideas.yml after the course record exists.
-- slug: "firewall-rate-limiting"
+# Proposed extension after the base WAF course.
+- slug: "firewall-streaming"
   course_slug: "firewall"
   development_status: "not_started"
-  name: "Rate limiting"
+  name: "Inspect streaming responses"
   description_markdown: |-
-    In this challenge extension you'll add [rate limiting](https://www.rfc-editor.org/rfc/rfc6585#section-4) to your AI firewall before requests reach the model.
-    Along the way you'll learn about per-client request budgets, HTTP 429 responses, retry headers, and more.
+    Extend your WAF to inspect server-sent events while delivering safe text incrementally.
+    Learn how event framing, buffering, and late denials interact.
