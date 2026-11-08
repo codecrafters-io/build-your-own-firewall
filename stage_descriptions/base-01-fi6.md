@@ -1,6 +1,8 @@
 In this stage, you'll start an HTTP server that answers health checks on port
 `8080`.
 
+### Why start with health checks?
+
 Your WAF will stand between external clients and a protected web application. A
 health check lets the caller ask whether the WAF is running, even when that
 application is unavailable. Start with this small endpoint before adding
@@ -18,7 +20,7 @@ redirect. Keep the process running so it can answer subsequent requests. Health
 checks must not contact the application or detector or depend on policy
 contents.
 
-The starter accepts three flags. Keep this interface throughout the course:
+The starter accepts three flags. Keep this interface throughout the challenge:
 
 | Flag         | Meaning                                                                |
 | ------------ | ---------------------------------------------------------------------- |
@@ -28,19 +30,20 @@ The starter accepts three flags. Keep this interface throughout the course:
 
 The application is also called the **origin**: it is the server your WAF will
 forward requests to. The detector is a separate service that scores inspection
-inputs in Stage 6.
+inputs in later stages.
 
-### Example
+### Tests
 
-Start your program in one terminal:
+The tester writes an empty policy (`{}`) to a temporary file and starts your
+program like this. The service URLs and absolute policy path vary between runs:
 
-```sh
+```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
 From another terminal, run this command twice:
 
-```sh
+```bash
 curl --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:8080/health
 ```
 
@@ -50,8 +53,8 @@ Each call should print:
 200
 ```
 
-The tester supplies an empty policy file (`{}`) and expects both checks to
-finish within five seconds of startup.
+The tester expects your server to become healthy within five seconds of startup
+and checks that it can answer repeated requests.
 
 ### Notes
 
@@ -59,5 +62,5 @@ finish within five seconds of startup.
 - The tester supplies service addresses and a temporary policy path. Read the
   flags rather than hardcoding the example values. It may start your program
   from a different working directory.
-- All exercises use local services and dummy data. No paid API key is needed.
-  Write debugging output to standard error.
+- All stages use local services and dummy data. No paid API key is needed. Write
+  debugging output to standard error.

@@ -1,9 +1,11 @@
 In this stage, you'll combine weighted attack signals into one request score.
 
+### Why combine weak signals?
+
 A request can contain several weak indicators without matching a decisive
 literal rule. An anomaly score lets each configured signal contribute evidence,
 then makes one policy decision after inspection. The score represents matched
-rules; it is not an attack probability.
+rules. It is not an attack probability.
 
 ### Policy
 
@@ -67,6 +69,29 @@ above, and:
 
 The origin must receive nothing. In log mode, the original request reaches it
 and the response reports `X-WAF-Match: heuristic_score`.
+
+### Tests
+
+The tester enables normalization and supplies the heuristic policy above. It
+starts your program like this. The service URLs and absolute policy path vary
+between runs:
+
+```bash
+./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
+```
+
+This request must return HTTP `403` and `X-WAF-Score: 5`:
+
+```bash
+curl --silent 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
+```
+
+```json
+{ "error": { "rule": "heuristic_score" } }
+```
+
+Other cases check repeated signals, clean-request diagnostics, and denylist
+precedence while retaining the full heuristic score.
 
 ### Notes
 

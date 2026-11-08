@@ -1,6 +1,8 @@
 In this stage, you'll call an ML detector and enforce a policy cutoff on its
 score.
 
+### Why add a detector?
+
 Signature rules only recognize configured patterns. A learned detector can
 supply another signal for modified attacks, but it can also be wrong or
 unavailable. Your WAF will integrate that service with a deadline and an
@@ -17,7 +19,7 @@ for each inspected request, including requests matching earlier rules. Use
 ```
 
 Send the current separate inspection strings, using normalized forms when
-enabled. Input ordering may vary; preserve every input and its boundary. Send no
+enabled. Input ordering may vary. Preserve every input and its boundary. Send no
 client headers, authentication, or policy to the detector. Health checks make no
 detector call.
 
@@ -46,7 +48,7 @@ select `ml_score`. Use the earlier block/log responses.
 Each detector request has a **200 ms deadline**, including reading its response.
 Do not retry or follow redirects. Any transport failure, timeout, non-`200`
 status, or invalid response makes detection unavailable. Fall back to the
-earlier denylist and heuristic rules; detector failure alone does not reject the
+earlier denylist and heuristic rules. Detector failure alone does not reject the
 request. This is a **fail-open** policy: it preserves availability while losing
 this detector's protection.
 
@@ -58,27 +60,42 @@ this detector's protection.
 
 Keep heuristic diagnostics. Forwarded traffic remains byte-for-byte unchanged.
 
-### Example
+### Tests
 
-For an inspected request with no earlier match, a detector score of `92` and
-threshold `70` must return HTTP `403`, the successful-detection headers above,
-and:
+The tester supplies normalization and classifier policy with threshold `70`,
+then starts your program like this. The service URLs and absolute policy path
+vary between runs:
+
+```bash
+./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
+```
+
+For this request, the detector returns `{"score":70}`:
+
+```bash
+curl --silent 'http://127.0.0.1:8080/search?q=example'
+```
+
+Your WAF must return HTTP `403`, `X-WAF-Detector-Status: ok`,
+`X-WAF-ML-Score: 70`, and:
 
 ```json
 { "error": { "rule": "ml_score" } }
 ```
 
-The origin must receive nothing. If that detector instead returns `503`, the
-same request must reach the origin unless an earlier rule rejects it.
+The origin must receive nothing. Other cases check zero scores, detector calls
+on denylist matches, and fallback for invalid responses, redirects, errors, and
+timeouts. If the detector returns `503`, an otherwise unmatched request must
+reach the origin.
 
 ### Notes
 
 - The supplied lab in `examples/waf-lab` includes a small pretrained classifier,
   its training source, and a separate held-out evaluation. You integrate
-  inference; training is not required to pass this stage.
+  inference. Training is not required to pass this stage.
 - Grader scores are scripted to test your integration and policy behavior. They
   do not measure the supplied model's detection accuracy. The detector is a
   trusted service that receives inspection content.
-- Modern WAFs combine ML scores and rules; see
+- Modern WAFs combine ML scores and rules. See
   [Cloudflare's attack-score documentation](https://developers.cloudflare.com/waf/detections/attack-score/).
   Its score convention differs: lower scores indicate greater risk.

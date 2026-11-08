@@ -1,6 +1,8 @@
 In this stage, you'll withhold responses that expose a protected pattern or
 exceed the inspection limit.
 
+### Why inspect responses before release?
+
 A clean-looking request can trigger an application error containing an internal
 secret. Request rules cannot catch a value that appears only in the response.
 Inspect the complete response before releasing its status, headers, or body so a
@@ -47,9 +49,21 @@ must not echo the protected match.
 Enforce response checks in log mode too. Without `response`, retain earlier
 relay behavior.
 
-### Example
+### Tests
 
-An origin error response contains:
+The tester supplies response policy with `max_bytes: 128` and the deny pattern
+above, then starts your program like this. The service URLs and absolute policy
+path vary between runs:
+
+```bash
+./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
+```
+
+For this request, the origin returns HTTP `500` with the body below:
+
+```bash
+curl --silent http://127.0.0.1:8080/debug
+```
 
 ```json
 { "debug": "INTERNAL_KEY_7F2A" }
@@ -61,17 +75,18 @@ The client must receive HTTP `403` and only a safe error body:
 { "error": { "rule": "response_leak" } }
 ```
 
-An escaped `"\u0049NTERNAL_KEY_7F2A"` must also be caught after JSON decoding. A
-clean response with partial marker `INTERNAL_` must pass unchanged when it fits
-the size limit.
+The tester also checks escaped JSON values and keys, duplicate-key values, size
+limits, log-mode match replacement, and unchanged clean responses. An escaped
+`"\u0049NTERNAL_KEY_7F2A"` must be caught after JSON decoding. A clean response
+with partial marker `INTERNAL_` must pass unchanged when it fits the size limit.
 
 ### Notes
 
 - The application has already received and processed the request when a response
   is denied. This check does not undo its side effects.
-- The base course uses complete, uncompressed responses. Streaming inspection
+- This challenge uses complete, uncompressed responses. Streaming inspection
   requires a different release strategy and is proposed as an extension.
-- Patterns match only the protected representations specified here. They are not
+  Patterns match only the protected representations specified here. They are not
   a guarantee against every possible data leak.
 - The
   [OWASP CRS scoring overview](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/)

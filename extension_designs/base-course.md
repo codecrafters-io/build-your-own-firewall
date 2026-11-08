@@ -29,12 +29,12 @@ configured.
 
 ## Stage-by-stage rubric audit
 
-Every lesson starts with exactly one goal sentence and one motivation paragraph.
-Observable requirements remain in the main lesson, including status codes,
-decision priority, boundaries, policy fields, and preservation. Essential domain
-concepts are supplemented with diagrams, wire examples, or tables.
-Implementation approaches are in the language hints; caveats and external
-sources are in notes.
+Every lesson starts with exactly one goal sentence, followed by a titled
+motivation section with one paragraph. Observable requirements remain in the
+main lesson, including status codes, decision priority, boundaries, policy
+fields, and preservation. Essential domain concepts are supplemented with
+diagrams, wire examples, or tables. Implementation approaches are in the
+language hints; caveats and external sources are in notes.
 
 | Stage                           | Tease and motivation                                      | Define: observable outcome                                                               | Essential supplement                          | Hint / note placement                                                                    |
 | ------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -126,6 +126,123 @@ The hosted prose check was not run: its API credential is not configured
 locally. The public v1 tester still implements the earlier gateway curriculum.
 Neither publishing a replacement tester nor changing the hosted course was
 performed in this pass.
+
+## Course-skills review, 2026-11-08
+
+Reviewed the existing challenge with
+[Review Challenge Extensions](https://github.com/codecrafters-io/course-skills/blob/fbc62c1a2c756ab002e44a715adc0e489320eb46/skills/reviewing-extensions/SKILL.md)
+and assessed the existing catalog copy with
+[Improve a Challenge Description](https://github.com/codecrafters-io/course-skills/blob/fbc62c1a2c756ab002e44a715adc0e489320eb46/skills/improving-challenge-descriptions/SKILL.md).
+The revision is pinned so the review can be reproduced. New-challenge,
+extension-authoring, concept-authoring, and language-support workflows do not
+apply to this maintenance pass.
+
+### Applied feedback
+
+All eleven descriptions were read alongside `internal/waf/cases.go`,
+`verify.go`, and `cli.go` in the sibling tester. The changes preserve the
+existing policy fields, decision precedence, statuses, headers, limits, and
+original-byte forwarding contracts. Language-specific implementation guidance
+remains in the existing solution hints.
+
+| Before                                                                                                  | After                                                                                                                                                    | Reason                                                                               |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| The opening goal was followed by untitled motivation text.                                              | Each goal is followed by a `### Why ...?` section.                                                                                                       | Only the one-sentence hook belongs before the first heading.                         |
+| `### Example`, `### Examples`, or `### Finale` were the only demonstrations. No lesson had `### Tests`. | Every lesson has `### Tests`, a launch command, a concrete HTTP request, and literal expected output. Existing explanatory examples remain where useful. | Make the tested interface and observable result explicit.                            |
+| Shell fences used `sh`.                                                                                 | Shell fences use `bash`.                                                                                                                                 | Match the review rubric's required fence tag.                                        |
+| "inputs in Stage 6", "handled in Stage 8", and "retain Stage 6 behavior"                                | "inputs in later stages", "handled in later stages", and "retain the earlier standalone heuristic and classifier cutoffs"                                | Refer to capabilities instead of unstable stage numbers.                             |
+| "Read rule IDs and terms from policy; the first matching entry wins."                                   | "Read rule IDs and terms from policy. The first matching entry wins."                                                                                    | Remove prose semicolons throughout the lessons.                                      |
+| Five lessons had four Notes bullets.                                                                    | Related caveats and references are consolidated into at most three bullets.                                                                              | Keep the notes within the rubric's limit without hiding requirements.                |
+| The normalization contract only explicitly validated query names and values.                            | It explicitly validates the path's decoded UTF-8 too.                                                                                                    | The tester already rejects `/search%FF`. This documents an existing requirement.     |
+| The normalized body example said it contributed `Mira`.                                                 | It distinguishes parsed `Mira` from normalized `mira`.                                                                                                   | Keep the example consistent with NFKC and case folding.                              |
+| The rate-limit example used `POST` and the ML example used score `92`.                                  | Tests show the grader's `GET` requests and inclusive score `70`.                                                                                         | The worked tests now reproduce actual fixtures. The general contracts are unchanged. |
+
+Each stage retains its full definition in the main body: local health and flags,
+proxy/header behavior, literal block/log decisions, normalization and
+boundaries, distinct-signal scoring, detector protocol and fallback, route
+thresholds, structured-body validation, fixed windows, response withholding, and
+virtual patches, respectively. Optional implementation tips were not promoted to
+new passing requirements.
+
+### Catalog assessment
+
+The current `description_md` is a concrete challenge teaser: "Build an inbound
+HTTP firewall that protects a web application", followed by the progression to
+an endpoint patch. Its promises match the implemented stages. A separate
+curiosity hook, a short explanation of the mechanism, and purpose-specific Why
+copy are absent. Missing elements are recorded as absent rather than scored as
+invented passages.
+
+For the existing teaser, the skill's integer scores are: artifact/capability
+`4/4` (a firewall with a reachable endpoint patch), technical specificity `3/4`
+(reverse proxy, ML scores, and resource limits are named), explanation fit `2/4`
+(the application context is present but the mechanism is unexplained), and
+clarity/economy `4/4` (three short sentences). The weighted total is `83.75/100`
+for this element only, not for the assembled description or learner outcomes.
+The factual gates pass for this teaser's advertised capabilities.
+
+Catalog wording was assessed without generating candidates or changing
+`description_md`. A future rewrite should follow that skill's element-by-element
+selection workflow. Purpose-specific text has no agreed storage or rendering
+contract here and does not belong in the static description.
+
+### Verification of this pass
+
+- The review skill's `parser_findings` returned no findings for any of the
+  eleven revised descriptions. Additional local checks verified one-sentence
+  hooks, exact hook/`marketing_md` agreement, heading levels and order, launch
+  commands and literal outputs in `### Tests`, and parseable JSON examples.
+- `make test` in the sibling tester passed all 22 Go/Python reference cases, all
+  ten preceding-stage rejection checks, and stage registration.
+- A temporary local runner executed the `curl` blocks extracted from each
+  lesson's `### Tests` against its corresponding Go and Python reference, using
+  local origin and detector fixtures with the documented policies. All 22 runs
+  passed. It checked response statuses and bodies, denial headers, origin
+  request counts, repeated health checks, and the permitted route/public-export
+  controls.
+- Prettier `3.9.6` with `--prose-wrap always --check` passed for the changed
+  Markdown files. `git diff --check` passed. No implementation, generated
+  starter, solution, or policy files changed.
+
+The optional external-model reviewer and hosted prose CI were not run in this
+pass. Local parser results do not replace the semantic review or the tester
+coverage findings below.
+
+### Tester follow-up findings
+
+The local reference checks establish that the supplied solutions pass the
+existing grader. They do not establish that every stated requirement is
+enforced. The review rubric's requirement that every described behavior be
+tested still has gaps in the sibling tester:
+
+- The proxy scenarios exercise `GET`, `POST` through later stages, and `PATCH`,
+  but have no `PUT` or `DELETE` probe. Header checks cover authorization and
+  selected reserved/connection headers, but do not assert preservation of
+  `Content-Type` or removal of every reserved `X-WAF-*` header. Add method
+  probes and explicit header assertions.
+- Heuristic scenarios assert `X-WAF-Score` but never assert the complete
+  `X-WAF-Signals` set. Detector-call counts are asserted only when a probe
+  supplies `Inputs`, not for every classified request. The delayed-detector case
+  waits 350 ms and does not measure the specified 200 ms deadline. Add
+  assertions for signal IDs, universal call counts, and the deadline boundary.
+- The route scenarios have no detector-outage case with `decisions` present, so
+  the documented standalone fallback is not independently tested. Add one whose
+  standalone and route thresholds yield different decisions.
+- The body cases do not exercise empty bodies, nested duplicate keys, or
+  media-type case. Rate-limit cases do not exercise an empty `paths` list or an
+  attack-denied attempt consuming a slot. Add cases for those distinct
+  contracts.
+- Response tests cover a body above its limit but not one exactly at it. Patch
+  tests omit multiple matching patches and missing/non-object arguments. Those
+  boundaries need explicit acceptance and rejection cases.
+- `verify` logs a scenario name and the CLI logs policy, but `runScenario` does
+  not log each request's method, target, headers, and body before sending it.
+  Add input logging so a learner can reproduce a failing probe. Existing fixed
+  fixture values should not be described as random.
+
+These findings are recorded for the active tester, rather than weakening the
+challenge contracts to match incomplete coverage. No sibling tester files were
+edited in this review.
 
 ## Sources
 

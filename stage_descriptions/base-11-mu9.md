@@ -1,6 +1,8 @@
 In this stage, you'll virtually patch an export endpoint by restricting the
 fields clients may request.
 
+### Why patch an endpoint?
+
 The lab application's export endpoint trusts a client-provided list of record
 fields and will also return a private field such as `password_hash`. That
 request can look harmless to both detectors. A **virtual patch** enforces a rule
@@ -28,7 +30,7 @@ Add an optional list of `virtual_patches`:
 
 A patch applies only when both the HTTP method and once-decoded path match
 exactly, case-sensitively. Query parameters do not affect route matching. An
-encoded `/api/%65xport` therefore matches `/api/export`; `/api/export/extra`
+encoded `/api/%65xport` therefore matches `/api/export`. `/api/export/extra`
 does not.
 
 ### Expected behavior
@@ -47,7 +49,7 @@ of strings in `allowed_values`, compared exactly and case-sensitively.
 
 A missing argument, malformed JSON, duplicate key, non-object body, or
 disallowed element fails the patch. Other top-level keys do not grant or remove
-permission. Every matching patch must pass; the first failing patch supplies its
+permission. Every matching patch must pass. The first failing patch supplies its
 ID.
 
 Validate and run the earlier request checks first. A surviving request must then
@@ -60,22 +62,53 @@ pass its patches **before forwarding**. On patch failure, return HTTP `403`,
 
 The origin must receive nothing. Preserve earlier diagnostics. Patch enforcement
 remains active in log mode and with the detector unavailable. It must also work
-when `inspection` is absent; parsing JSON for the patch is part of its own
+when `inspection` is absent. Parsing JSON for the patch is part of its own
 contract. Earlier body-validation failures retain their earlier statuses.
 
 Allowed requests retain original body bytes and headers. Do not remove a
 forbidden field and forward a modified request. Without `virtual_patches`,
 retain earlier behavior.
 
-### Finale
+### Tests
 
-The tester sends a private-field export with a low scripted ML score and no
-matching heuristic. Your WAF must reject it by patch ID. It then sends a
-public-field export to the same route; that request must reach the application
-unchanged.
+The tester supplies the patch above alongside earlier policies and starts your
+program like this. The service URLs and absolute policy path vary between runs:
 
-The final replay also exercises the earlier controls against labeled attack and
-legitimate fixtures. Success includes both rejecting the specified attacks and
+```bash
+./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
+```
+
+With a scripted ML score of `12` and no heuristic match, this request must
+return HTTP `403` and `X-WAF-Match: export-fields`:
+
+```bash
+curl --silent http://127.0.0.1:8080/api/export \
+  -H 'Content-Type: application/json' \
+  --data-binary '{"fields":["name","password_hash"]}'
+```
+
+```json
+{ "error": { "rule": "export-fields" } }
+```
+
+The tester then sends this public-field request, which must reach the origin
+unchanged and return HTTP `200`:
+
+```bash
+curl --silent http://127.0.0.1:8080/api/export \
+  -H 'Content-Type: application/json' \
+  --data-binary '{ "fields": ["customer_id", "name"] }'
+```
+
+```json
+{ "ok": true }
+```
+
+Other cases check encoded paths, policy-defined routes and arguments, invalid
+field arrays, duplicate keys, log mode, and detector outage.
+
+The final replay also exercises the earlier controls against attack and
+legitimate requests. Success includes both rejecting the specified attacks and
 preserving permitted traffic. Your program does not need to print a scoreboard.
 
 ### Notes
