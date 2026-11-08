@@ -5,6 +5,11 @@ inbound WAF, and `v3` carries the operability fixes and strengthened grader.
 Keeping the same stage IDs does not make the retired tester compatible. A local
 pass does not update the hosted tester.
 
+Course CI pins an SDK revision that downloads release archives through GitHub's
+asset API. The public release-download route returned repeated `504` responses
+during the v3 rollout while the asset API served the same archive successfully.
+Keep the pin until that downloader fix is available on SDK main.
+
 1. Put the matching course and `firewall-tester` changes on reviewable branches.
    From this course checkout, run `make test`. In the tester repository, run its
    Test workflow with `course_ref` set to the exact course commit to verify the
