@@ -50,8 +50,7 @@
  			return nil, fmt.Errorf("invalid query key")
  		}
  		decoded, err := url.QueryUnescape(value)
-@@ -223,50 +224,57 @@
- 		result = append(result, value)
+@@ -224,50 +225,57 @@
  	case []any:
  		for _, item := range value {
  			result = append(result, stringValues(item)...)
@@ -76,14 +75,14 @@
  type ResponsePolicy struct {
  	MaxBytes     int64    `json:"max_bytes"`
  	DenyPatterns []string `json:"deny_patterns"`
-+}
+ }
 +type Patch struct {
 +	ID            string   `json:"id"`
 +	Method        string   `json:"method"`
 +	Path          string   `json:"path"`
 +	Argument      string   `json:"argument"`
 +	AllowedValues []string `json:"allowed_values"`
- }
++}
 
  func main() {
  	origin := flag.String("origin", "", "Origin web application URL")
@@ -108,7 +107,8 @@
  			w.WriteHeader(200)
  			return
  		}
-@@ -417,50 +425,75 @@
+ 		diagnostics := http.Header{}
+@@ -420,50 +428,75 @@
  			thresholds := policy.Decisions.Default
  			for _, route := range policy.Decisions.Routes {
  				if decodedPath == route.Path {

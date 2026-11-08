@@ -1,4 +1,5 @@
 import argparse
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -80,7 +81,7 @@ def main():
                         self.send_header(key, value)
                     self.end_headers()
                     self.wfile.write(content)
-            except (OSError, urllib.error.URLError):
+            except (OSError, urllib.error.URLError, http.client.HTTPException):
                 self.reject(502, "origin_unavailable", diagnostics)
 
         do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request

@@ -1,4 +1,115 @@
-@@ -78,50 +78,73 @@
+@@ -1,68 +1,110 @@
+ import argparse
+ import http.client
++import time
++import threading
++import socket
+ import json
+ import urllib.error
+ import urllib.request
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ from pathlib import Path
+ import re
+ import unicodedata
+ import urllib.parse
+
+
+ class NoRedirect(urllib.request.HTTPRedirectHandler):
+     def redirect_request(self, request, fp, code, message, headers, new_url):
+         return None
+
+
+ HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+                "te", "trailer", "transfer-encoding", "upgrade", "content-length"}
+
+
+ def decode_component(value, plus=False):
+     if re.search(r"%(?![0-9a-fA-F]{2})", value):
+         raise ValueError("Invalid percent escape")
+     if plus:
+         value = value.replace("+", " ")
+     return urllib.parse.unquote(value, encoding="utf-8", errors="strict")
+
+
+ def form_values(raw):
+     values = []
+     for part in raw.split("&"):
+         if part:
+             key, _, value = part.partition("=")
+             decode_component(key, True)
+             values.append(decode_component(value, True))
+     return values
+
+
+ def canonical(value):
+     return unicodedata.normalize("NFKC", value).casefold()
+
+
++def classify(endpoint, inputs):
++    deadline = time.monotonic() + 0.2
++    url = urllib.parse.urlsplit(endpoint)
++    connection = http.client.HTTPConnection(url.hostname, url.port, timeout=0.2)
++    timer = None
++    try:
++        connection.connect()
++        transport = connection.sock
++
++        def expire():
++            try:
++                transport.shutdown(socket.SHUT_RDWR)
++            except OSError:
++                pass
++
++        remaining = deadline - time.monotonic()
++        if remaining <= 0:
++            return None
++        timer = threading.Timer(remaining, expire)
++        timer.daemon = True
++        timer.start()
++        connection.request("POST", url.path.rstrip("/") + "/classify",
++                           json.dumps({"inputs": inputs}),
++                           {"Content-Type": "application/json"})
++        with connection.getresponse() as response:
++            result = json.loads(response.read())
++        if time.monotonic() >= deadline or response.status != 200:
++            return None
++        if not isinstance(result, dict) or type(result.get("score")) is not int:
++            return None
++        return result["score"] if 0 <= result["score"] <= 100 else None
++    except (OSError, ValueError, http.client.HTTPException):
++        return None
++    finally:
++        if timer is not None:
++            timer.cancel()
++        connection.close()
++
++
+ def main():
+     parser = argparse.ArgumentParser()
+     parser.add_argument("--origin", required=True)
+     parser.add_argument("--detector", required=True)
+     parser.add_argument("--policy", required=True)
+     args = parser.parse_args()
+     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+     policy = json.loads(Path(args.policy).read_text())
+
+     class Handler(BaseHTTPRequestHandler):
+         def reject(self, status, rule, diagnostics=None):
+             payload = json.dumps({"error": {"rule": rule}}).encode()
+             self.send_response(status)
+             self.send_header("Content-Type", "application/json")
+             self.send_header("Content-Length", str(len(payload)))
+             self.send_header("X-WAF-Match", rule)
+             for key, value in (diagnostics or {}).items():
+                 if key.lower() != "x-waf-match":
+                     self.send_header(key, str(value))
+             self.send_header("Connection", "close")
+             self.end_headers()
+             self.wfile.write(payload)
+             self.close_connection = True
+
+         def handle_request(self):
+@@ -79,50 +121,59 @@
                  raw_path, _, query = self.path.partition("?")
                  decoded_path = decode_component(raw_path)
                  if policy.get("normalization"):
@@ -27,21 +138,7 @@
 +            classifier = policy.get("classifier")
 +            ml_score = None
 +            if classifier:
-+                try:
-+                    request = urllib.request.Request(args.detector.rstrip("/") + "/classify",
-+                        data=json.dumps({"inputs": inputs}).encode(),
-+                        headers={"Content-Type": "application/json"}, method="POST")
-+                    with opener.open(request, timeout=0.2) as response:
-+                        if response.status != 200:
-+                            raise ValueError("Unavailable classifier")
-+                        result = json.loads(response.read())
-+                    if not isinstance(result, dict) or type(result.get("score")) is not int:
-+                        raise ValueError("Invalid classifier score")
-+                    if not 0 <= result["score"] <= 100:
-+                        raise ValueError("Invalid classifier score")
-+                    ml_score = result["score"]
-+                except (OSError, ValueError, urllib.error.URLError):
-+                    pass
++                ml_score = classify(args.detector, inputs)
 +                diagnostics["X-WAF-Detector-Status"] = "ok" if ml_score is not None else "unavailable"
 +                if ml_score is not None:
 +                    diagnostics["X-WAF-ML-Score"] = str(ml_score)

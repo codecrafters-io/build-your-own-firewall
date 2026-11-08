@@ -49,6 +49,10 @@ must not echo the protected match.
 Enforce response checks in log mode too. Without `response`, retain earlier
 relay behavior.
 
+An incomplete origin response still returns HTTP `502` with
+`error.rule: "origin_unavailable"`. Buffering within the size limit does not
+make a truncated body safe to release.
+
 ### Tests
 
 The tester supplies response policy with `max_bytes: 128` and the deny pattern

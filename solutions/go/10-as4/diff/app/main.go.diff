@@ -123,7 +123,7 @@
  			return
  		}
  		diagnostics := http.Header{}
-@@ -425,43 +430,71 @@
+@@ -428,43 +433,71 @@
  				} else if *mlScore >= thresholds.MLMedium && score >= thresholds.HeuristicMedium {
  					match = "combined_scores"
  				}

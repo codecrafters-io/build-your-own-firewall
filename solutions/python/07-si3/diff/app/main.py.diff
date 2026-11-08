@@ -1,24 +1,24 @@
-@@ -101,50 +101,66 @@
+@@ -130,50 +130,66 @@
+                 self.reject(400, "invalid_request")
+                 return
+             if policy.get("normalization"):
+                 inputs = [canonical(value) for value in inputs]
+             match = next((rule["id"] for rule in policy.get("denylist", [])
+                           if any(rule["term"] in value for value in inputs)), None)
+             heuristic = policy.get("heuristics")
+             signals = [signal for signal in (heuristic or {}).get("signals", [])
+                        if any(re.search(signal["pattern"], value) for value in inputs)]
+             score = sum(signal["weight"] for signal in signals)
+             if heuristic:
+                 diagnostics["X-WAF-Score"] = str(score)
+                 if signals:
+                     diagnostics["X-WAF-Signals"] = ",".join(signal["id"] for signal in signals)
                  if not match and score >= heuristic["threshold"]:
                      match = "heuristic_score"
              classifier = policy.get("classifier")
              ml_score = None
              if classifier:
-                 try:
-                     request = urllib.request.Request(args.detector.rstrip("/") + "/classify",
-                         data=json.dumps({"inputs": inputs}).encode(),
-                         headers={"Content-Type": "application/json"}, method="POST")
-                     with opener.open(request, timeout=0.2) as response:
-                         if response.status != 200:
-                             raise ValueError("Unavailable classifier")
-                         result = json.loads(response.read())
-                     if not isinstance(result, dict) or type(result.get("score")) is not int:
-                         raise ValueError("Invalid classifier score")
-                     if not 0 <= result["score"] <= 100:
-                         raise ValueError("Invalid classifier score")
-                     ml_score = result["score"]
-                 except (OSError, ValueError, urllib.error.URLError):
-                     pass
+                 ml_score = classify(args.detector, inputs)
                  diagnostics["X-WAF-Detector-Status"] = "ok" if ml_score is not None else "unavailable"
                  if ml_score is not None:
                      diagnostics["X-WAF-ML-Score"] = str(ml_score)

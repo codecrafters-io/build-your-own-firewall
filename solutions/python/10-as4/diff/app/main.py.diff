@@ -1,4 +1,4 @@
-@@ -210,46 +210,61 @@
+@@ -239,46 +239,63 @@
                  if not match:
                      if score >= thresholds["heuristic_high"]:
                          match = "heuristic_high"
@@ -31,6 +31,8 @@
 +                        if len(content) > response_policy["max_bytes"]:
 +                            self.reject(502, "response_too_large", diagnostics)
 +                            return
++                        if response.length not in (None, 0):
++                            raise http.client.IncompleteRead(content, response.length)
 +                        candidates = [content.decode("utf-8", errors="replace")]
 +                        try:
 +                            candidates.extend(strings(json.loads(content,
@@ -51,7 +53,7 @@
                          self.send_header(key, value)
                      self.end_headers()
                      self.wfile.write(content)
-             except (OSError, urllib.error.URLError):
+             except (OSError, urllib.error.URLError, http.client.HTTPException):
                  self.reject(502, "origin_unavailable", diagnostics)
 
          do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request

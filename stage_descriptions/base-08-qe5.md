@@ -46,6 +46,10 @@ These failures happen before detection or forwarding, in both modes. Size checks
 take precedence. Empty bodies add no body inputs and need no media type. Without
 `inspection`, retain the earlier body behavior.
 
+For example, an empty request to `/echo` with normalization and inspection
+enabled contributes only `["/echo"]` to the detector, without an empty-string
+placeholder. This applies to empty `POST` bodies too.
+
 After validation, all existing detectors inspect the new inputs. An allowed or
 logged request must reach the origin with its **original body bytes**, media
 type, and other preserved metadata.
@@ -87,8 +91,9 @@ curl --silent http://127.0.0.1:8080/echo \
 ```
 
 Other cases check form decoding, detector inputs, unchanged clean JSON, invalid
-bodies, unsupported encodings, and byte limits. With a four-byte limit, the
-UTF-8 body `éé` is eligible, while `ééa` must return HTTP `413`.
+bodies, empty-body detector inputs, unsupported encodings, and byte limits. With
+a four-byte limit, the UTF-8 body `éé` is eligible, while `ééa` must return HTTP
+`413`.
 
 ### Notes
 

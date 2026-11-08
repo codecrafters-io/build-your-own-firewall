@@ -1,4 +1,4 @@
-@@ -197,50 +197,63 @@
+@@ -226,50 +226,63 @@
                  if ml_score is not None:
                      diagnostics["X-WAF-ML-Score"] = str(ml_score)
                      if not match and ml_score >= classifier["threshold"]:
@@ -56,9 +56,9 @@
                          if len(content) > response_policy["max_bytes"]:
                              self.reject(502, "response_too_large", diagnostics)
                              return
+                         if response.length not in (None, 0):
+                             raise http.client.IncompleteRead(content, response.length)
                          candidates = [content.decode("utf-8", errors="replace")]
                          try:
                              candidates.extend(strings(json.loads(content,
                                  object_pairs_hook=lambda pairs: [item for pair in pairs for item in pair])))
-                         except (ValueError, UnicodeError):
-                             pass

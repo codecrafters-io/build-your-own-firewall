@@ -165,7 +165,7 @@
  		if policy.Inspection != nil && int64(len(body)) > policy.Inspection.MaxBodyBytes {
  			reject(w, 413, "body_too_large", diagnostics)
  			return
-@@ -302,50 +318,88 @@
+@@ -305,50 +321,88 @@
  				value, err := parseJSON(body)
  				if err != nil {
  					reject(w, 400, "invalid_request", diagnostics)

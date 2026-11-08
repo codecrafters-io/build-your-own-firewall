@@ -1,5 +1,9 @@
-@@ -1,34 +1,37 @@
+@@ -1,38 +1,39 @@
  import argparse
+ import http.client
+-import time
+-import threading
+ import socket
  import json
  import urllib.error
  import urllib.request
@@ -36,22 +40,22 @@
          if part:
              key, _, value = part.partition("=")
              decode_component(key, True)
-@@ -54,50 +57,52 @@
-
-
- def parse_json(raw):
-     return json.loads(raw, object_pairs_hook=unique_object,
-                       parse_constant=invalid_constant)
-
-
- def strings(value):
-     if isinstance(value, str):
-         return [value]
-     if isinstance(value, list):
-         return [text for item in value for text in strings(item)]
-     if isinstance(value, dict):
-         return [text for item in value.values() for text in strings(item)]
-     return []
+@@ -97,50 +98,52 @@
+                            json.dumps({"inputs": inputs}),
+                            {"Content-Type": "application/json"})
+         with connection.getresponse() as response:
+             result = json.loads(response.read())
+         if time.monotonic() >= deadline or response.status != 200:
+             return None
+         if not isinstance(result, dict) or type(result.get("score")) is not int:
+             return None
+         return result["score"] if 0 <= result["score"] <= 100 else None
+     except (OSError, ValueError, http.client.HTTPException):
+         return None
+     finally:
+         if timer is not None:
+             timer.cancel()
+         connection.close()
 
 
  def main():
@@ -89,10 +93,10 @@
              diagnostics = {}
              length = int(self.headers.get("Content-Length", 0))
              inspection = policy.get("inspection")
-@@ -118,50 +123,68 @@
-             except (ValueError, UnicodeError):
-                 self.reject(400, "invalid_request")
+@@ -163,50 +166,68 @@
                  return
+             if inspection and not body:
+                 inputs.pop()
              if inspection and body:
                  try:
                      if self.headers.get("Content-Encoding", "identity").lower() != "identity":
@@ -148,13 +152,13 @@
              classifier = policy.get("classifier")
              ml_score = None
              if classifier:
-                 try:
-                     request = urllib.request.Request(args.detector.rstrip("/") + "/classify",
-                         data=json.dumps({"inputs": inputs}).encode(),
-                         headers={"Content-Type": "application/json"}, method="POST")
-                     with opener.open(request, timeout=0.2) as response:
-                         if response.status != 200:
-                             raise ValueError("Unavailable classifier")
-                         result = json.loads(response.read())
-                     if not isinstance(result, dict) or type(result.get("score")) is not int:
-                         raise ValueError("Invalid classifier score")
+                 ml_score = classify(args.detector, inputs)
+                 diagnostics["X-WAF-Detector-Status"] = "ok" if ml_score is not None else "unavailable"
+                 if ml_score is not None:
+                     diagnostics["X-WAF-ML-Score"] = str(ml_score)
+                     if not match and ml_score >= classifier["threshold"]:
+                         match = "ml_score"
+             decisions = policy.get("decisions")
+             if decisions and ml_score is not None:
+                 thresholds = decisions["default"]
+                 for route in decisions.get("routes", []):

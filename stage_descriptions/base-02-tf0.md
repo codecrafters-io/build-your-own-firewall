@@ -71,10 +71,11 @@ which your WAF must relay:
 { "ok": true }
 ```
 
-The tester also checks unchanged request bytes and headers, error and redirect
-responses, and removal of connection and reserved headers. An origin `400` must
-remain `400`. With the origin stopped, a request to `/products` must return HTTP
-`502` and:
+The tester also checks all five supported methods, unchanged request bytes and
+headers, error and redirect responses, and removal of connection and reserved
+headers. An incomplete origin response must produce `502` before any origin
+bytes or headers are released. An origin `400` must remain `400`. With the
+origin stopped, a request to `/products` must return HTTP `502` and:
 
 ```json
 { "error": { "rule": "origin_unavailable" } }

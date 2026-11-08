@@ -1,4 +1,4 @@
-@@ -68,50 +68,60 @@
+@@ -69,50 +69,60 @@
              if self.command == "GET" and self.path == "/health":
                  self.send_response(200)
                  self.send_header("Content-Length", "0")

@@ -1,5 +1,6 @@
-@@ -1,73 +1,83 @@
+@@ -1,74 +1,84 @@
  import argparse
+ import http.client
  import json
  import urllib.error
  import urllib.request
@@ -81,4 +82,4 @@
                          self.send_header(key, value)
                      self.end_headers()
                      self.wfile.write(content)
-             except (OSError, urllib.error.URLError):
+             except (OSError, urllib.error.URLError, http.client.HTTPException):

@@ -1,4 +1,4 @@
-@@ -18,96 +18,148 @@
+@@ -22,50 +22,78 @@
                 "te", "trailer", "transfer-encoding", "upgrade", "content-length"}
 
 
@@ -52,13 +52,32 @@
 +    return []
 +
 +
- def main():
-     parser = argparse.ArgumentParser()
-     parser.add_argument("--origin", required=True)
-     parser.add_argument("--detector", required=True)
-     parser.add_argument("--policy", required=True)
-     args = parser.parse_args()
-     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+ def classify(endpoint, inputs):
+     deadline = time.monotonic() + 0.2
+     url = urllib.parse.urlsplit(endpoint)
+     connection = http.client.HTTPConnection(url.hostname, url.port, timeout=0.2)
+     timer = None
+     try:
+         connection.connect()
+         transport = connection.sock
+
+         def expire():
+             try:
+                 transport.shutdown(socket.SHUT_RDWR)
+             except OSError:
+                 pass
+
+         remaining = deadline - time.monotonic()
+         if remaining <= 0:
+             return None
+         timer = threading.Timer(remaining, expire)
+         timer.daemon = True
+         timer.start()
+         connection.request("POST", url.path.rstrip("/") + "/classify",
+                            json.dumps({"inputs": inputs}),
+                            {"Content-Type": "application/json"})
+         with connection.getresponse() as response:
+@@ -93,64 +121,90 @@
      policy = json.loads(Path(args.policy).read_text())
 
      class Handler(BaseHTTPRequestHandler):
@@ -102,6 +121,8 @@
              except (ValueError, UnicodeError):
                  self.reject(400, "invalid_request")
                  return
++            if inspection and not body:
++                inputs.pop()
 +            if inspection and body:
 +                try:
 +                    if self.headers.get("Content-Encoding", "identity").lower() != "identity":
@@ -139,11 +160,11 @@
              classifier = policy.get("classifier")
              ml_score = None
              if classifier:
-                 try:
-                     request = urllib.request.Request(args.detector.rstrip("/") + "/classify",
-                         data=json.dumps({"inputs": inputs}).encode(),
-                         headers={"Content-Type": "application/json"}, method="POST")
-                     with opener.open(request, timeout=0.2) as response:
-                         if response.status != 200:
-                             raise ValueError("Unavailable classifier")
-                         result = json.loads(response.read())
+                 ml_score = classify(args.detector, inputs)
+                 diagnostics["X-WAF-Detector-Status"] = "ok" if ml_score is not None else "unavailable"
+                 if ml_score is not None:
+                     diagnostics["X-WAF-ML-Score"] = str(ml_score)
+                     if not match and ml_score >= classifier["threshold"]:
+                         match = "ml_score"
+             decisions = policy.get("decisions")
+             if decisions and ml_score is not None:

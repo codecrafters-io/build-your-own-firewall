@@ -1,7 +1,12 @@
 hints:
   - title_markdown: How do I keep the detector deadline and fallback correct?
     body_markdown:
-      Use an opener with redirects disabled and timeout=0.2 when opening the
-      detector request. Validate the complete JSON reply, require type(score) is
-      int to exclude booleans, then check the range. Catch HTTP, transport,
-      timeout, and parsing errors and leave the ML score absent on failure.
+      "A socket timeout limits an individual blocking operation, not the total
+      request. Track a monotonic deadline across connection, headers, and body.
+      With http.client.HTTPConnection, use the remaining connect timeout and a
+      timer that shuts down the connected socket when the deadline expires.
+      Cancel the timer and close the connection in finally. This also interrupts
+      trickled headers or body bytes. Do not follow redirects. Validate the
+      whole JSON reply, require type(score) is int to exclude booleans, and
+      check the range. Treat HTTPException, transport, timeout, and parsing
+      errors as unavailable detection."

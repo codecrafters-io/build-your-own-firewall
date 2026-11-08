@@ -73,6 +73,14 @@ The sibling `firewall-tester` repository contains the active grader under
 [the course design and rubric review](extension_designs/base-course.md) for
 stage contracts and verification status.
 
+With the tester checkout beside this repository, run `make test` to verify all
+Go and Python stage references, preceding-stage rejection, grader regressions,
+and the supplied model. These checks use local loopback listeners on port
+`8080`, Go, and the Python starter's `uv` launcher.
+
+The WAF curriculum requires a coordinated tester release. See
+[the release procedure](RELEASING.md) before enabling it for hosted learners.
+
 The base course uses complete, uncompressed HTTP messages. It does not claim
 production-grade coverage of HTTP parsing, attack detection, distributed rate
 limits, or application authorization.

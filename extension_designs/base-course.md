@@ -6,6 +6,43 @@ against the supplied teaching rubric. The course slug and stage IDs remain
 stable identifiers. Earlier `base-NN-*.md` design records describe the retired
 AI gateway exercises; they are historical, not contracts for this course.
 
+## Operability fixes, 2026-11-08
+
+The operability audit found gaps that were not covered by the earlier passing
+reference checks. The current changes retain the lesson contracts and repair the
+implementations and grader:
+
+- Python's detector request now has one monotonic deadline. A timer interrupts
+  the connected socket even when headers or body bytes keep arriving. All
+  cumulative references from ML detection onward use the same behavior, and the
+  Python hint explains why a socket timeout alone is insufficient.
+- Python converts incomplete origin reads into `502 origin_unavailable`, both
+  with and without bounded response inspection. No partial origin response is
+  released.
+- Structured inspection omits the empty body placeholder in both languages,
+  including when normalization is disabled. Earlier unstructured inspection
+  retains its prior input shape.
+- The grader checks all five supported methods, exact fired-signal IDs in any
+  order, late and trickled detector responses, truncated replies, and empty body
+  inputs. Seven regression checks include six deliberately broken references
+  that must fail and reversed signal IDs that must pass.
+- The course root now exposes `make test`. Tester publication is gated on the
+  reference checks, model checks, and real final-stage CLI for both languages.
+  [The release procedure](../RELEASING.md) describes the remaining coordinated
+  publication and hosted selection steps.
+
+The final local `make test` passed all 22 stage references, ten preceding-stage
+rejection checks, seven grader regression checks, stage registration, and four
+model checks. Course schema, all eleven goals, 22 hint mappings, 29 JSON
+examples, 23 shell examples, formatting, and all 22 reconstructed solution
+patches passed validation. Live HTTP probes, the real-model lab walkthrough, and
+the actual final-stage CLI are checked separately from the unit suite.
+
+These results do not publish a tester or verify the hosted learner interface.
+GitHub release discovery subsequently confirmed that `v2` already introduced the
+inbound WAF. The coordinated `v3` release carries these fixes and must be
+selected by the hosted course before its completion checks count as verified.
+
 ## Architecture and scope
 
 ```text

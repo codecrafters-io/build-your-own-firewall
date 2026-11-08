@@ -50,7 +50,7 @@
  			return nil, fmt.Errorf("invalid query key")
  		}
  		decoded, err := url.QueryUnescape(value)
-@@ -130,98 +131,216 @@
+@@ -130,98 +131,219 @@
  	defer response.Body.Close()
  	data, err := io.ReadAll(response.Body)
  	if err != nil || response.StatusCode != 200 {
@@ -209,6 +209,9 @@
  			}
  			inputs = append(inputs, string(body))
  		}
++		if policy.Inspection != nil && len(body) == 0 {
++			inputs = inputs[:len(inputs)-1]
++		}
 +		if policy.Inspection != nil && len(body) > 0 {
 +			if encoding := r.Header.Get("Content-Encoding"); encoding != "" && !strings.EqualFold(encoding, "identity") {
 +				reject(w, 415, "unsupported_body", diagnostics)

@@ -91,7 +91,8 @@ curl --silent 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
 ```
 
 Other cases check repeated signals, clean-request diagnostics, and denylist
-precedence while retaining the full heuristic score.
+precedence while retaining the full heuristic score and all fired signal IDs.
+The tester accepts either ID order, but missing, repeated, or extra IDs fail.
 
 ### Notes
 

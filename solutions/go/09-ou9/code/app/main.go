@@ -302,6 +302,9 @@ func main() {
 			}
 			inputs = append(inputs, string(body))
 		}
+		if policy.Inspection != nil && len(body) == 0 {
+			inputs = inputs[:len(inputs)-1]
+		}
 		if policy.Inspection != nil && len(body) > 0 {
 			if encoding := r.Header.Get("Content-Encoding"); encoding != "" && !strings.EqualFold(encoding, "identity") {
 				reject(w, 415, "unsupported_body", diagnostics)

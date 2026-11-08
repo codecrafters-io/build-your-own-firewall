@@ -45,12 +45,13 @@ Denylist matches have first priority, then the earlier heuristic cutoff. If
 neither matches and the detector score is at least the classifier threshold,
 select `ml_score`. Use the earlier block/log responses.
 
-Each detector request has a **200 ms deadline**, including reading its response.
-Do not retry or follow redirects. Any transport failure, timeout, non-`200`
-status, or invalid response makes detection unavailable. Fall back to the
-earlier denylist and heuristic rules. Detector failure alone does not reject the
-request. This is a **fail-open** policy: it preserves availability while losing
-this detector's protection.
+Each detector request has a **200 ms total deadline**, including connecting and
+reading response headers and the complete body. Receiving another byte does not
+restart the deadline. Do not retry or follow redirects. Any transport failure,
+timeout, non-`200` status, or invalid response makes detection unavailable. Fall
+back to the earlier denylist and heuristic rules. Detector failure alone does
+not reject the request. This is a **fail-open** policy: it preserves
+availability while losing this detector's protection.
 
 | Detector outcome       | Required response headers                                |
 | ---------------------- | -------------------------------------------------------- |
@@ -85,8 +86,9 @@ Your WAF must return HTTP `403`, `X-WAF-Detector-Status: ok`,
 
 The origin must receive nothing. Other cases check zero scores, detector calls
 on denylist matches, and fallback for invalid responses, redirects, errors, and
-timeouts. If the detector returns `503`, an otherwise unmatched request must
-reach the origin.
+timeouts, including trickled headers and body bytes, and incomplete replies. If
+the detector returns `503`, an otherwise unmatched request must reach the
+origin.
 
 ### Notes
 

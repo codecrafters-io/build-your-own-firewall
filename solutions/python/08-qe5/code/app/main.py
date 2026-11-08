@@ -1,4 +1,8 @@
 import argparse
+import http.client
+import time
+import threading
+import socket
 import json
 import urllib.error
 import urllib.request
@@ -68,6 +72,45 @@ def strings(value):
     return []
 
 
+def classify(endpoint, inputs):
+    deadline = time.monotonic() + 0.2
+    url = urllib.parse.urlsplit(endpoint)
+    connection = http.client.HTTPConnection(url.hostname, url.port, timeout=0.2)
+    timer = None
+    try:
+        connection.connect()
+        transport = connection.sock
+
+        def expire():
+            try:
+                transport.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        timer = threading.Timer(remaining, expire)
+        timer.daemon = True
+        timer.start()
+        connection.request("POST", url.path.rstrip("/") + "/classify",
+                           json.dumps({"inputs": inputs}),
+                           {"Content-Type": "application/json"})
+        with connection.getresponse() as response:
+            result = json.loads(response.read())
+        if time.monotonic() >= deadline or response.status != 200:
+            return None
+        if not isinstance(result, dict) or type(result.get("score")) is not int:
+            return None
+        return result["score"] if 0 <= result["score"] <= 100 else None
+    except (OSError, ValueError, http.client.HTTPException):
+        return None
+    finally:
+        if timer is not None:
+            timer.cancel()
+        connection.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--origin", required=True)
@@ -118,6 +161,8 @@ def main():
             except (ValueError, UnicodeError):
                 self.reject(400, "invalid_request")
                 return
+            if inspection and not body:
+                inputs.pop()
             if inspection and body:
                 try:
                     if self.headers.get("Content-Encoding", "identity").lower() != "identity":
@@ -155,21 +200,7 @@ def main():
             classifier = policy.get("classifier")
             ml_score = None
             if classifier:
-                try:
-                    request = urllib.request.Request(args.detector.rstrip("/") + "/classify",
-                        data=json.dumps({"inputs": inputs}).encode(),
-                        headers={"Content-Type": "application/json"}, method="POST")
-                    with opener.open(request, timeout=0.2) as response:
-                        if response.status != 200:
-                            raise ValueError("Unavailable classifier")
-                        result = json.loads(response.read())
-                    if not isinstance(result, dict) or type(result.get("score")) is not int:
-                        raise ValueError("Invalid classifier score")
-                    if not 0 <= result["score"] <= 100:
-                        raise ValueError("Invalid classifier score")
-                    ml_score = result["score"]
-                except (OSError, ValueError, urllib.error.URLError):
-                    pass
+                ml_score = classify(args.detector, inputs)
                 diagnostics["X-WAF-Detector-Status"] = "ok" if ml_score is not None else "unavailable"
                 if ml_score is not None:
                     diagnostics["X-WAF-ML-Score"] = str(ml_score)
@@ -220,7 +251,7 @@ def main():
                         self.send_header(key, value)
                     self.end_headers()
                     self.wfile.write(content)
-            except (OSError, urllib.error.URLError):
+            except (OSError, urllib.error.URLError, http.client.HTTPException):
                 self.reject(502, "origin_unavailable", diagnostics)
 
         do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request
