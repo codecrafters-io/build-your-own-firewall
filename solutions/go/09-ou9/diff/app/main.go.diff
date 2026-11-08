@@ -165,9 +165,7 @@
  		if policy.Inspection != nil && int64(len(body)) > policy.Inspection.MaxBodyBytes {
  			reject(w, 413, "body_too_large", diagnostics)
  			return
-@@ -300,50 +316,88 @@
- 			switch mediaType {
- 			case "application/json":
+@@ -302,50 +318,88 @@
  				value, err := parseJSON(body)
  				if err != nil {
  					reject(w, 400, "invalid_request", diagnostics)
@@ -191,8 +189,8 @@
  		if policy.Normalization {
  			for index, value := range inputs {
  				inputs[index] = canonical(value)
-+			}
-+		}
+ 			}
+ 		}
 +		if rate := policy.RateLimit; rate != nil {
 +			applies := rate.Paths == nil
 +			for _, path := range rate.Paths {
@@ -229,8 +227,8 @@
 +					reject(w, 429, "rate_limit", diagnostics)
 +					return
 +				}
- 			}
- 		}
++			}
++		}
  		match := literalMatch(policy, inputs)
  		score := 0
  		fired := []string{}
@@ -254,3 +252,5 @@
  			mlScore = classify(*detector, inputs)
  			diagnostics.Set("X-WAF-Detector-Status", "unavailable")
  			if mlScore != nil {
+ 				diagnostics.Set("X-WAF-Detector-Status", "ok")
+ 				diagnostics.Set("X-WAF-ML-Score", strconv.Itoa(*mlScore))

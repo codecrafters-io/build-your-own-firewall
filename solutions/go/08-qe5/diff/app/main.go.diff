@@ -79,7 +79,7 @@
 +type Inspection struct {
 +	MaxBodyBytes int64 `json:"max_body_bytes"`
 +}
-
++
 +func parseJSON(data []byte) (any, error) {
 +	decoder := json.NewDecoder(bytes.NewReader(data))
 +	decoder.UseNumber()
@@ -150,7 +150,7 @@
 +	}
 +	return result
 +}
-+
+
  func main() {
  	origin := flag.String("origin", "", "Origin web application URL")
  	detector := flag.String("detector", "", "ML detector URL")

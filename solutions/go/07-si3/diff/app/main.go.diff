@@ -113,10 +113,7 @@
  		var reader io.Reader = r.Body
  		body, err := io.ReadAll(reader)
  		if err != nil {
-@@ -197,52 +210,71 @@
- 		fired := []string{}
- 		if policy.Heuristics != nil {
- 			for _, signal := range policy.Heuristics.Signals {
+@@ -200,50 +213,69 @@
  				if patternMatch(signal.Pattern, inputs) {
  					score += signal.Weight
  					fired = append(fired, signal.ID)
@@ -139,17 +136,17 @@
  				diagnostics.Set("X-WAF-ML-Score", strconv.Itoa(*mlScore))
  				if match == "" && *mlScore >= policy.Classifier.Threshold {
  					match = "ml_score"
-+				}
-+			}
-+		}
+ 				}
+ 			}
+ 		}
 +		if policy.Decisions != nil && mlScore != nil {
 +			thresholds := policy.Decisions.Default
 +			for _, route := range policy.Decisions.Routes {
 +				if decodedPath == route.Path {
 +					thresholds = route
 +					break
- 				}
- 			}
++				}
++			}
 +			match = literalMatch(policy, inputs)
 +			if match == "" {
 +				if score >= thresholds.HeuristicHigh {
@@ -160,7 +157,7 @@
 +					match = "combined_scores"
 +				}
 +			}
- 		}
++		}
  		if match != "" {
  			if policy.Mode != "log" {
  				reject(w, 403, match, diagnostics)
@@ -185,3 +182,4 @@
  		if err != nil {
  			reject(w, 502, "origin_unavailable", diagnostics)
  			return
+ 		}
