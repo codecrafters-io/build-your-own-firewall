@@ -43,8 +43,8 @@ client-to-application exchange. Do not copy `Connection`, `Keep-Alive`,
 named in `Connection`. Your HTTP library can supply valid framing for the new
 connection.
 
-This is the only header filtering required here. Application headers must still
-reach the other side.
+Remove both these connection headers and the reserved `X-WAF-` headers described
+above. Preserve all remaining application headers.
 
 ### Tests
 

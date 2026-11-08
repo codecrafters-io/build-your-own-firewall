@@ -58,7 +58,8 @@ and checks that it can answer repeated requests.
 
 ### Notes
 
-- A response body is optional. Other methods and paths are introduced next.
+- A response body is optional. Other methods and paths are introduced in later
+  stages.
 - The tester supplies service addresses and a temporary policy path. Read the
   flags rather than hardcoding the example values. It may start your program
   from a different working directory.

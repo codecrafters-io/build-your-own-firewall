@@ -21,15 +21,15 @@ Add these optional policy fields:
 }
 ```
 
-When `normalization` is true, replace the earlier raw-target inspection with
-these separate strings:
+When `normalization` is true, replace the raw-target inspection from earlier
+stages with these separate strings:
 
 | Source  | Inspection input                                                                      |
 | ------- | ------------------------------------------------------------------------------------- |
 | Path    | Percent-decoded once, keeping `+` as `+`                                              |
 | Query   | Each parameter's value, percent-decoded once, with `+` becoming a space               |
 | Headers | Every UTF-8 value of each header named by `inspect_headers`, without percent decoding |
-| Body    | The original UTF-8 text, with structured parsing introduced later                     |
+| Body    | The original UTF-8 text, with structured parsing introduced in later stages           |
 
 Query parameters are separated by `&`, and the first `=` separates a name from
 its value. Preserve repeated values as independent inputs. Validate escapes and
@@ -44,14 +44,14 @@ are already in this canonical form.
 
 ### Expected behavior
 
-Match rules against each resulting string independently. Keep the earlier
-block/log responses, first-rule precedence, and request-local diagnostics.
-Neither normalization nor inspection may change a forwarded path, query, header,
-or body.
+Match rules against each resulting string independently. Keep the block/log
+responses from earlier stages, first-rule precedence, and request-local
+diagnostics. Neither normalization nor inspection may change a forwarded path,
+query, header, or body.
 
-Without `normalization`, retain the earlier raw-target/body behavior and ignore
-`inspect_headers`. Header names are case-insensitive. Decoding is exactly one
-layer. It does not repeatedly unwrap an input until a rule matches.
+Without `normalization`, retain the raw-target/body behavior from earlier stages
+and ignore `inspect_headers`. Header names are case-insensitive. Decoding is
+exactly one layer. It does not repeatedly unwrap an input until a rule matches.
 
 ### Examples
 
