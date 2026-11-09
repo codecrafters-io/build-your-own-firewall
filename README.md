@@ -1,4 +1,4 @@
-# Build your own Web Application Firewall
+# Build your own Firewall
 
 Build an inbound HTTP firewall that protects a web application while keeping
 legitimate traffic working. You'll start with a reverse proxy, add attack rules

@@ -1,5 +1,5 @@
 This is a starting point for Python solutions to the
-["Build your own Web Application Firewall" Challenge](https://codecrafters.io/challenges/firewall).
+["Build your own Firewall" Challenge](https://codecrafters.io/challenges/firewall).
 
 You'll build an inbound HTTP firewall:
 
