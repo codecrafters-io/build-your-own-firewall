@@ -1,6 +1,6 @@
 slug: firewall
-name: Build your own Web Application Firewall
-short_name: WAF
+name: Build your own Firewall
+short_name: Firewall
 release_status: alpha
 description_md: Build an inbound HTTP firewall that protects a web application. Start with a working reverse proxy, then add attack rules, evasion handling, machine-learning scores, and resource limits. Finish by virtually patching a vulnerable endpoint while keeping legitimate requests working.
 short_description_md: Learn HTTP proxying, attack detection, machine-learning integration, and security policy
