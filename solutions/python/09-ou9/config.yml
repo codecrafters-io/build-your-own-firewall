@@ -1,7 +1,0 @@
-hints:
-  - title_markdown: How do I update rate counters safely?
-    body_markdown:
-      Keep shared buckets outside the handler class and protect the entire
-      decision with threading.Lock. Use self.client_address[0] and
-      time.monotonic(). Store the window start and admitted-attempt count.
-      Compute Retry-After with math.ceil on the remaining duration.

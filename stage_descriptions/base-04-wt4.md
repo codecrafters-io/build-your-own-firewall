@@ -1,12 +1,20 @@
 In this stage, you'll inspect decoded, normalized request inputs without
 changing forwarded traffic.
 
-### Why normalize inspection inputs?
+### Why normalize only the inspection view?
 
-A rule for `<script` misses `%3Cscript` in a query and full-width
-`＜ＳＣＲＩＰＴ` in text. Applications decode inputs before using them. Your
-inspection view must account for the specified representations while preserving
-the client's original request for forwarding.
+If a firewall inspects raw request bytes while the protected application decodes
+or transforms its inputs, payloads can slip past literal rules. For example, a
+rule looking for `<script` will miss `%3Cscript` in a query string that the web
+framework percent-decodes, or full-width `＜ＳＣＲＩＰＴ` if a downstream
+component applies compatibility normalization and case folding.
+
+Your firewall builds a separate *inspection view*: it decodes one layer of
+percent encoding in paths and query components, then applies Unicode NFKC
+normalization followed by case folding to each inspection input. Forwarded
+traffic keeps its original bytes. This course defines a fixed inspection
+pipeline; in production, those transformations must account for how the
+protected application actually interprets inputs.
 
 ### The inspection view
 
@@ -28,14 +36,22 @@ stages with these separate strings:
 | ------- | ------------------------------------------------------------------------------------- |
 | Path    | Percent-decoded once, keeping `+` as `+`                                              |
 | Query   | Each parameter's value, percent-decoded once, with `+` becoming a space               |
-| Headers | Every UTF-8 value of each header named by `inspect_headers`, without percent decoding |
+| Headers | Each UTF-8 header occurrence named by `inspect_headers`, without percent decoding     |
 | Body    | The original UTF-8 text, with structured parsing introduced in later stages           |
 
 Query parameters are separated by `&`, and the first `=` separates a name from
-its value. Preserve repeated values as independent inputs. Validate escapes and
-decoded UTF-8 in the path and in query names and values, but do not inspect
-query names. An invalid query escape or invalid decoded UTF-8 returns HTTP
-`400`, JSON `error.rule: "invalid_request"`, before the origin is contacted.
+its value. A parameter without `=` has an empty value; its name is validated but
+not inspected. Preserve repeated values as independent inputs.
+
+Validate percent escapes and decoded UTF-8 in the path even when normalization
+is disabled. When normalization is enabled, also validate query names and values,
+but do not inspect query names. An invalid path or query escape or invalid
+decoded UTF-8 returns HTTP `400`, JSON `error.rule: "invalid_request"`, before
+the origin is contacted. The Notes section covers malformed paths rejected by
+the HTTP server itself.
+
+Inspect each occurrence of a configured header as a separate input. Do not
+split a header value on commas.
 
 For every inspection input, apply **Unicode NFKC normalization, then case
 folding**. NFKC combines compatibility forms such as full-width letters. Case

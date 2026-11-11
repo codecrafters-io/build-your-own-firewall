@@ -1,7 +1,0 @@
-hints:
-  - title_markdown: How do I update rate counters safely?
-    body_markdown:
-      Use a mutex around the complete lookup, window reset, limit check, and
-      increment. Extract the peer IP with net.SplitHostPort(r.RemoteAddr).
-      time.Now values retain monotonic elapsed time for subtraction. Remove
-      expired entries and release the mutex before returning an HTTP response.

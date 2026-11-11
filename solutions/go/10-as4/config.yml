@@ -1,7 +1,0 @@
-hints:
-  - title_markdown: How do I avoid leaking bytes before a denial?
-    body_markdown:
-      Read and check the bounded origin body before calling WriteHeader or
-      Write. Inspect raw text and decoded JSON strings; Decoder.Token can visit
-      escaped strings even when object keys repeat. If safe, copy the original
-      bytes and allowed headers. If denied, build a fresh response.

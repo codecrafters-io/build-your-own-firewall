@@ -1,8 +1,0 @@
-hints:
-  - title_markdown: How do I detect duplicate JSON keys and bound reads?
-    body_markdown:
-      "Reject an oversized Content-Length before reading. json.loads supports
-      object_pairs_hook: build each object from its pairs and reject a key seen
-      twice. Use parse_constant to reject NaN and Infinity. Walk string values
-      recursively; never serialize that inspection view back into the forwarded
-      body."

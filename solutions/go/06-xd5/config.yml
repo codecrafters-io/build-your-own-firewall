@@ -1,8 +1,0 @@
-hints:
-  - title_markdown: How do I keep the detector deadline and fallback correct?
-    body_markdown:
-      Use a separate http.Client with a 200 ms Timeout and redirects disabled.
-      Decode score as *int so missing and null values remain distinguishable
-      from zero. Reject non-200 or malformed replies. Represent failure
-      separately from a score so a failed call cannot accidentally become score
-      zero.

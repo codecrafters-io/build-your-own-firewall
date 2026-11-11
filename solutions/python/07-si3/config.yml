@@ -1,8 +1,0 @@
-hints:
-  - title_markdown: Where do the combined decisions replace earlier cutoffs?
-    body_markdown:
-      Start with the denylist result. For a successful classifier and decisions
-      policy, replace standalone score decisions with the selected route
-      conditions, checking heuristic_high, then ml_high, then the combined
-      condition. Do not return early on the standalone heuristic threshold
-      before combined policy has had a chance to evaluate it.

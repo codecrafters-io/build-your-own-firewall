@@ -1,7 +1,0 @@
-hints:
-  - title_markdown: How do I detect duplicate JSON keys and bound reads?
-    body_markdown:
-      Wrap the body in io.LimitReader(max+1) before reading. json.Unmarshal into
-      a map loses duplicate keys, so use json.Decoder tokens and track seen keys
-      within each object. Walk decoded string values recursively; retain the
-      original body separately for forwarding.

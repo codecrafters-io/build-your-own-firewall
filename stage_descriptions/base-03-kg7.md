@@ -3,10 +3,15 @@ mode.
 
 ### Why block before forwarding?
 
-A transparent proxy forwards attack traffic as readily as normal traffic. Add a
-policy decision before forwarding: a matched request can be rejected before the
-application receives it. Log mode lets you observe the same matches while
-evaluating a policy's effect on legitimate traffic.
+If an application includes unescaped user input in an HTML response, a payload
+containing `<script>` can execute attacker-controlled JavaScript in another
+user's browser (Cross-Site Scripting). Stopping matching requests at the
+firewall prevents them from reaching a vulnerable route without changing the
+application server.
+
+Because literal token rules can also match benign traffic, such as a user
+discussing HTML tags in a comment, teams can evaluate new policies in `log` mode
+to observe matches on live traffic before switching to `block` mode.
 
 ### Policy and inspection inputs
 

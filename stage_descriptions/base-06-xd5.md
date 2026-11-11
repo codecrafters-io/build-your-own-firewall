@@ -5,7 +5,7 @@ score.
 
 Signature rules only recognize configured patterns. A learned detector can
 supply another signal for modified attacks, but it can also be wrong or
-unavailable. Your WAF will integrate that service with a deadline and an
+unavailable. Your firewall will integrate that service with a deadline and an
 explicit fallback rather than treating its answer as unquestionable.
 
 ### Detector contract
@@ -18,10 +18,19 @@ for each inspected request, including requests matching earlier rules. Use
 { "inputs": ["/search", "union select password from users", ""] }
 ```
 
+With normalization enabled, this example corresponds to
+`GET /search?q=union+select+password+from+users` with an empty body and no
+inspected headers. The inputs are the decoded path, query value, and body. The
+trailing `""` represents the empty body, not an extra placeholder to append.
+
 Send the current separate inspection strings, using normalized forms when
-enabled. Input ordering may vary. Preserve every input and its boundary. Send no
-client headers, authentication, or policy to the detector. Health checks make no
-detector call.
+enabled. Input ordering may vary. Preserve every input and its boundary. Send
+configured header inspection values inside `inputs`, but do not copy the
+client's HTTP headers, authentication, or policy into the detector request.
+
+Health checks and requests rejected during input validation make no detector
+call and include no detector diagnostic headers. An origin `400` response is
+different: inspection and detection have already occurred before forwarding.
 
 A successful result is HTTP `200` with exactly one JSON object:
 
@@ -53,11 +62,14 @@ back to the earlier denylist and heuristic rules. Detector failure alone does
 not reject the request. This is a **fail-open** policy: it preserves
 availability while losing this detector's protection.
 
-| Detector outcome       | Required response headers                                |
+Include these diagnostics on client-facing responses, including forwarded
+responses and `403` blocks. Do not forward them upstream to the origin.
+
+| Detector outcome       | Required client-facing response headers                   |
 | ---------------------- | -------------------------------------------------------- |
-| Valid score `92`       | `X-WAF-Detector-Status: ok`, `X-WAF-ML-Score: 92`        |
-| Unavailable or invalid | `X-WAF-Detector-Status: unavailable`, no ML score header |
-| No classifier policy   | No detector call or detector headers required            |
+| Valid score `92`       | `X-WAF-Detector-Status: ok`, `X-WAF-ML-Score: 92`          |
+| Unavailable or invalid | `X-WAF-Detector-Status: unavailable`, no ML score header   |
+| No classifier policy   | No detector call or detector headers required             |
 
 Keep heuristic diagnostics. Forwarded traffic remains byte-for-byte unchanged.
 
@@ -77,7 +89,7 @@ For this request, the detector returns `{"score":70}`:
 curl --silent 'http://127.0.0.1:8080/search?q=example'
 ```
 
-Your WAF must return HTTP `403`, `X-WAF-Detector-Status: ok`,
+Your firewall must return HTTP `403`, `X-WAF-Detector-Status: ok`,
 `X-WAF-ML-Score: 70`, and:
 
 ```json

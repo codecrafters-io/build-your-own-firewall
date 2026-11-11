@@ -2,10 +2,15 @@ In this stage, you'll combine weighted attack signals into one request score.
 
 ### Why combine weak signals?
 
-A request can contain several weak indicators without matching a decisive
-literal rule. An anomaly score lets each configured signal contribute evidence,
-then makes one policy decision after inspection. The score represents matched
-rules. It is not an attack probability.
+A single suspicious fragment can appear in legitimate traffic: `--` occurs in
+command-line examples, and `or 1=1` may appear in programming discussions. In a
+vulnerable SQL query, however, an injected `OR 1=1` can make a condition always
+true, while `--` can comment out the remaining SQL.
+
+Anomaly scoring lets these signals contribute weights toward a request total.
+With the policy below, their weights combine as `3 + 2 = 5`, reaching the
+enforcement threshold. This score measures matched signals, not attack
+probability.
 
 ### Policy
 
@@ -23,9 +28,9 @@ Add an optional `heuristics` object alongside earlier fields:
 }
 ```
 
-Each pattern is a regular expression matched against the current inspection
-inputs. Use the normalized inputs when normalization is enabled. A pattern
-cannot span input boundaries.
+Each pattern is a regular expression searched anywhere within each current
+inspection input. Use the normalized inputs when normalization is enabled. A
+pattern cannot span input boundaries.
 
 The request score is the sum of weights of **distinct matching signals**. A
 signal contributes once even if its pattern repeats or matches several inputs.
@@ -37,8 +42,10 @@ If a denylist rule matches, it still supplies the decision. Otherwise, a score
 greater than or equal to `threshold` selects `heuristic_score`, using the
 existing block/log behavior. Without `heuristics`, retain earlier behavior.
 
-With heuristics configured, report complete diagnostics even when a denylist
-rule wins:
+With heuristics configured, report complete diagnostics on the client-facing
+response for every inspected request, including allowed requests, log-mode
+matches, and `403` blocks. Report the full score and all fired signals even when
+a denylist rule wins. Do not forward these diagnostic headers to the origin:
 
 ```text
 X-WAF-Score: 5
@@ -48,6 +55,9 @@ X-WAF-Signals: sql-or,sql-comment
 The score header is an integer. List each fired ID once, comma-separated, in any
 order. With no matches, report score `0` and omit the signal header or leave it
 empty. Do not copy diagnostics from an earlier request.
+
+Local `GET /health` requests and validation errors that occur before scoring
+skip heuristic evaluation and omit `X-WAF-Score` and `X-WAF-Signals`.
 
 ### Examples
 

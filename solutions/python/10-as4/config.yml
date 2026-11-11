@@ -1,7 +1,0 @@
-hints:
-  - title_markdown: How do I avoid leaking bytes before a denial?
-    body_markdown:
-      Do not call send_response or end_headers until the bounded origin body
-      passes. An object_pairs_hook that retains every key/value pair lets JSON
-      inspection include duplicate values and escaped keys. On denial, discard
-      origin headers and write a fresh JSON error without matched content.

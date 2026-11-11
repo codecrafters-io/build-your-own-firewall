@@ -1,8 +1,0 @@
-hints:
-  - title_markdown: Where do the combined decisions replace earlier cutoffs?
-    body_markdown:
-      Keep the literal-match result separate from heuristic and ML cutoff
-      matches. If classification succeeds and decisions is configured, select
-      the exact decoded-path thresholds, then evaluate the heuristic floor, high
-      ML, and the combined condition in that order. Add HeuristicHigh to the
-      thresholds struct. On failure, retain the earlier heuristic cutoff.

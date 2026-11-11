@@ -1,8 +1,0 @@
-hints:
-  - title_markdown: How do I enforce the patch independently of detection?
-    body_markdown:
-      After request detectors pass, find matching method/path entries. Parse the
-      original body using the duplicate-key-checking parser even when body
-      inspection is disabled. Require the configured argument to be a nonempty
-      []any, then check every element against the exact allowed strings. Forward
-      the untouched bytes only after every applicable patch passes.

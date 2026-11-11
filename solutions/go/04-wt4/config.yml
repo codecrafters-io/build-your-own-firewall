@@ -1,8 +1,0 @@
-hints:
-  - title_markdown: Which decoding and Unicode functions should I use?
-    body_markdown:
-      Use r.URL.Path for the already-decoded path. Split RawQuery on ampersands
-      and decode each value once with url.QueryUnescape, validating UTF-8. Use
-      norm.NFKC.String followed by cases.Fold().String from golang.org/x/text.
-      Preserve RequestURI for forwarding and the original decoded path for route
-      comparisons.

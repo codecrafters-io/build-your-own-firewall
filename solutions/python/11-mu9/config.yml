@@ -1,7 +1,0 @@
-hints:
-  - title_markdown: How do I enforce the patch independently of detection?
-    body_markdown:
-      Run patch checks after the detection decision and before opening the
-      origin request. Parse the original body with the strict JSON helper, look
-      up the configured argument, and check its type and all elements. Keep this
-      path active in log mode and after classifier failures.

@@ -1,7 +1,0 @@
-hints:
-  - title_markdown: How do I avoid counting one signal repeatedly?
-    body_markdown:
-      Evaluate each signal against all separate inputs. As soon as any input
-      matches its regexp, add that signal ID and weight once. Continue
-      evaluating the other signals even after finding a denylist match so the
-      diagnostics remain complete.
