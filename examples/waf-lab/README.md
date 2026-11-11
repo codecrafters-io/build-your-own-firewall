@@ -41,7 +41,7 @@ In a third terminal, choose your Go or Python solution and use the absolute path
 to `examples/waf-lab/policy.json`. For example, from the repository root:
 
 ```sh
-./solutions/python/11-mu9/code/your_program.sh \
+./solutions/python/10-mu9/code/your_program.sh \
   --origin http://127.0.0.1:8081 \
   --detector http://127.0.0.1:8082 \
   --policy "$PWD/examples/waf-lab/policy.json"
@@ -80,9 +80,7 @@ curl --include http://127.0.0.1:8080/api/export \
 ```
 
 Also try `/debug`: the direct application response contains a dummy internal
-key, while the WAF should return `403` with rule `response_leak`. Four rapid
-requests to `/login` exercise the example policy's three-request window; the
-fourth should return `429` with `Retry-After`.
+key, while the WAF should return `403` with rule `response_leak`.
 
 Stop each service with Ctrl-C when finished. Keep this intentionally unvalidated
 lab application on loopback.

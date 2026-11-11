@@ -6,6 +6,26 @@ against the supplied teaching rubric. The course slug and stage IDs remain
 stable identifiers. Earlier `base-NN-*.md` design records describe the retired
 AI gateway exercises; they are historical, not contracts for this course.
 
+## Rate-limiting removal, 2026-11-11
+
+The active base course now has ten stages. Rate limiting (`ou9`) is removed
+from the lessons, cumulative references, lab policy, and active grader. Response
+inspection (`as4`) and virtual patching (`mu9`) retain their slugs as Stages 9
+and 10. Verification records below describe the earlier eleven-stage course.
+
+The ten-stage `make test` run passed all 20 Go/Python references, nine
+preceding-stage rejection checks, eight grader regression checks, stage
+registration, and four model checks. Both final references also passed the
+real tester CLI. All 20 regenerated solution diffs reconstruct their sources.
+The real-model lab walkthrough preserved public exports, blocked private
+exports and response leaks, and allowed six rapid login requests in both
+languages. A matching tester release is still required for hosted rollout.
+
+Response inspection now treats nonstandard JSON constants as raw-text input in
+both languages. Regression cases cover escaped versus raw markers in these
+responses and replacement-only inspection of invalid UTF-8 without changing
+forwarded bytes. The Python mutation check catches permissive JSON extraction.
+
 ## Operability fixes, 2026-11-08
 
 The operability audit found gaps that were not covered by the earlier passing
@@ -83,9 +103,8 @@ first three stages; caveats and external sources are in notes.
 | 6. Add ML detection             | Integrate a useful but fallible signal                    | One validated score call, 200 ms deadline, visible failure fallback                      | Request/reply examples and outcome headers    | Supplied-model limits in notes                                                          |
 | 7. Tune detection decisions     | Reduce a specified false positive without a global bypass | Exact-route thresholds, a rule-only floor, and explicit fallback precedence              | Score/route decision table                    | Path/inspection distinction in notes                                                    |
 | 8. Inspect request bodies       | Inspect what parsers consume without unbounded reads      | Recursive JSON values, forms, inclusive byte bound, 400/413/415 errors                   | Media-type and failure tables                 | Unsupported encodings and specs in notes                                                 |
-| 9. Rate limit clients           | Protect endpoints from individually valid bursts          | Atomic peer-IP window, 429, Retry-After, health exemption                                | Fixed-window example                          | Deployment limits in notes                                                              |
-| 10. Prevent response leaks      | Withhold secrets that appear only after origin processing | Bounded scan before release, decoded JSON strings, safe denials                          | Origin-to-client before/after example         | Side effects and streaming in notes                                                     |
-| 11. Virtually patch an endpoint | Constrain a known flaw that detectors can miss            | Private-field denial and successful public-field export                                  | Exact method/path and allowed-value examples  | Application authorization responsibility in notes                                       |
+| 9. Prevent response leaks       | Withhold secrets that appear only after origin processing | Bounded scan before release, decoded JSON strings, safe denials                          | Origin-to-client before/after example         | Side effects and streaming in notes                                                     |
+| 10. Virtually patch an endpoint | Constrain a known flaw that detectors can miss            | Private-field denial and successful public-field export                                  | Exact method/path and allowed-value examples  | Application authorization responsibility in notes                                       |
 
 The lessons do not prescribe the learners' data structures or expose complete
 solution algorithms. Rules needed to reproduce a grader decision are not hidden

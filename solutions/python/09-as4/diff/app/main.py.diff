@@ -1,0 +1,107 @@
+@@ -1,38 +1,38 @@
+ import argparse
+ import http.client
+-import time
+-import threading
+ import socket
+ import json
+ import urllib.error
+ import urllib.request
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ from pathlib import Path
+ import re
+ import unicodedata
+ import urllib.parse
++import threading
++import time
+
+
+ class NoRedirect(urllib.request.HTTPRedirectHandler):
+     def redirect_request(self, request, fp, code, message, headers, new_url):
+         return None
+
+
+ HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+                "te", "trailer", "transfer-encoding", "upgrade", "content-length"}
+
+
+ def decode_component(value, plus=False):
+     if re.search(r"%(?![0-9a-fA-F]{2})", value):
+         raise ValueError("Invalid percent escape")
+     if plus:
+         value = value.replace("+", " ")
+     return urllib.parse.unquote(value, encoding="utf-8", errors="strict")
+
+
+ def form_values(raw):
+     values = []
+     for part in raw.split("&"):
+         if part:
+             key, _, value = part.partition("=")
+             decode_component(key, True)
+@@ -218,46 +218,64 @@
+                 if not match:
+                     if score >= thresholds["heuristic_high"]:
+                         match = "heuristic_high"
+                     elif ml_score >= thresholds["ml_high"]:
+                         match = "ml_high"
+                     elif ml_score >= thresholds["ml_medium"] and score >= thresholds["heuristic_medium"]:
+                         match = "combined_scores"
+             if match:
+                 if policy.get("mode", "block") == "block":
+                     self.reject(403, match, diagnostics)
+                     return
+                 diagnostics["X-WAF-Match"] = match
+             try:
+                 excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(self.headers.get_all("Connection", [])).split(",")}
+                 headers = {key: value for key, value in self.headers.items()
+                            if key.lower() not in excluded and key.lower() != "host"
+                            and not key.lower().startswith("x-waf-")}
+                 request = urllib.request.Request(args.origin.rstrip("/") + self.path,
+                     data=body if length or self.command in {"POST", "PUT", "PATCH"} else None,
+                     headers=headers, method=self.command)
+                 try:
+                     response = opener.open(request, timeout=3)
+                 except urllib.error.HTTPError as error:
+                     response = error
+                 with response:
+-                    content = response.read()
++                    response_policy = policy.get("response")
++                    content = response.read(response_policy["max_bytes"] + 1) if response_policy else response.read()
++                    if response_policy:
++                        if len(content) > response_policy["max_bytes"]:
++                            self.reject(502, "response_too_large", diagnostics)
++                            return
++                        if response.length not in (None, 0):
++                            raise http.client.IncompleteRead(content, response.length)
++                        candidates = [content.decode("utf-8", errors="replace")]
++                        try:
++                            candidates.extend(strings(json.loads(content,
++                                object_pairs_hook=lambda pairs: [item for pair in pairs for item in pair],
++                                parse_constant=invalid_constant)))
++                        except (ValueError, UnicodeError):
++                            pass
++                        if any(re.search(pattern, value) for pattern in response_policy["deny_patterns"]
++                               for value in candidates):
++                            self.reject(403, "response_leak", diagnostics)
++                            return
+                     self.send_response(response.status)
+                     excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(response.headers.get_all("Connection", [])).split(",")}
+                     for key, value in response.getheaders():
+                         if key.lower() not in excluded and not key.lower().startswith("x-waf-"):
+                             self.send_header(key, value)
+                     self.send_header("Content-Length", str(len(content)))
+                     for key, value in diagnostics.items():
+                         self.send_header(key, value)
+                     self.end_headers()
+                     self.wfile.write(content)
+             except (OSError, urllib.error.URLError, http.client.HTTPException):
+                 self.reject(502, "origin_unavailable", diagnostics)
+
+         do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request
+
+     ThreadingHTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
+
+
+ if __name__ == "__main__":
+     main()

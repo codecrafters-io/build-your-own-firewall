@@ -1,0 +1,186 @@
+@@ -38,50 +38,51 @@
+ func reject(w http.ResponseWriter, status int, rule string, diagnostics http.Header) {
+ 	for key, values := range diagnostics {
+ 		w.Header()[key] = values
+ 	}
+ 	w.Header().Set("Content-Type", "application/json")
+ 	w.Header().Set("X-WAF-Match", rule)
+ 	w.Header().Set("Connection", "close")
+ 	w.WriteHeader(status)
+ 	json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"rule": rule}})
+ }
+
+ type Rule struct {
+ 	ID   string `json:"id"`
+ 	Term string `json:"term"`
+ }
+ type Policy struct {
+ 	Mode           string          `json:"mode"`
+ 	Denylist       []Rule          `json:"denylist"`
+ 	Normalization  bool            `json:"normalization"`
+ 	InspectHeaders []string        `json:"inspect_headers"`
+ 	Heuristics     *Heuristics     `json:"heuristics"`
+ 	Classifier     *Classifier     `json:"classifier"`
+ 	Decisions      *Decisions      `json:"decisions"`
+ 	Inspection     *Inspection     `json:"inspection"`
+ 	Response       *ResponsePolicy `json:"response"`
++	VirtualPatches []Patch         `json:"virtual_patches"`
+ }
+
+ func literalMatch(policy Policy, inputs []string) string {
+ 	for _, rule := range policy.Denylist {
+ 		for _, value := range inputs {
+ 			if strings.Contains(value, rule.Term) {
+ 				return rule.ID
+ 			}
+ 		}
+ 	}
+ 	return ""
+ }
+
+ func formValues(raw string) ([]string, error) {
+ 	values := []string{}
+ 	for _, part := range strings.Split(raw, "&") {
+ 		if part == "" {
+ 			continue
+ 		}
+ 		key, value, _ := strings.Cut(part, "=")
+ 		decodedKey, err := url.QueryUnescape(key)
+ 		if err != nil || !utf8.ValidString(decodedKey) {
+ 			return nil, fmt.Errorf("invalid query key")
+ 		}
+ 		decoded, err := url.QueryUnescape(value)
+@@ -211,50 +212,57 @@
+ 	}
+ 	return value, nil
+ }
+
+ func stringValues(value any) []string {
+ 	result := []string{}
+ 	switch value := value.(type) {
+ 	case string:
+ 		result = append(result, value)
+ 	case []any:
+ 		for _, item := range value {
+ 			result = append(result, stringValues(item)...)
+ 		}
+ 	case map[string]any:
+ 		for _, item := range value {
+ 			result = append(result, stringValues(item)...)
+ 		}
+ 	}
+ 	return result
+ }
+
+ type ResponsePolicy struct {
+ 	MaxBytes     int64    `json:"max_bytes"`
+ 	DenyPatterns []string `json:"deny_patterns"`
+ }
++type Patch struct {
++	ID            string   `json:"id"`
++	Method        string   `json:"method"`
++	Path          string   `json:"path"`
++	Argument      string   `json:"argument"`
++	AllowedValues []string `json:"allowed_values"`
++}
+
+ func main() {
+ 	origin := flag.String("origin", "", "Origin web application URL")
+ 	detector := flag.String("detector", "", "ML detector URL")
+ 	policyPath := flag.String("policy", "", "Trusted policy JSON file")
+ 	flag.Parse()
+ 	data, err := os.ReadFile(*policyPath)
+ 	if err != nil {
+ 		panic(err)
+ 	}
+ 	var policy Policy
+ 	if err := json.Unmarshal(data, &policy); err != nil {
+ 		panic(err)
+ 	}
+ 	client := &http.Client{Timeout: 3 * time.Second,
+ 		Transport:     &http.Transport{DisableCompression: true},
+ 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+ 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		if r.Method == "GET" && r.URL.RequestURI() == "/health" {
+ 			w.WriteHeader(200)
+ 			return
+ 		}
+ 		diagnostics := http.Header{}
+ 		var reader io.Reader = r.Body
+ 		if policy.Inspection != nil {
+@@ -367,50 +375,75 @@
+ 			thresholds := policy.Decisions.Default
+ 			for _, route := range policy.Decisions.Routes {
+ 				if decodedPath == route.Path {
+ 					thresholds = route
+ 					break
+ 				}
+ 			}
+ 			match = literalMatch(policy, inputs)
+ 			if match == "" {
+ 				if score >= thresholds.HeuristicHigh {
+ 					match = "heuristic_high"
+ 				} else if *mlScore >= thresholds.MLHigh {
+ 					match = "ml_high"
+ 				} else if *mlScore >= thresholds.MLMedium && score >= thresholds.HeuristicMedium {
+ 					match = "combined_scores"
+ 				}
+ 			}
+ 		}
+ 		if match != "" {
+ 			if policy.Mode != "log" {
+ 				reject(w, 403, match, diagnostics)
+ 				return
+ 			}
+ 			diagnostics.Set("X-WAF-Match", match)
+ 		}
++		for _, patch := range policy.VirtualPatches {
++			if r.Method != patch.Method || decodedPath != patch.Path {
++				continue
++			}
++			value, err := parseJSON(body)
++			object, isObject := value.(map[string]any)
++			values, isArray := object[patch.Argument].([]any)
++			valid := err == nil && isObject && isArray && len(values) > 0
++			for _, item := range values {
++				text, isString := item.(string)
++				allowed := false
++				for _, permitted := range patch.AllowedValues {
++					if isString && text == permitted {
++						allowed = true
++					}
++				}
++				if !allowed {
++					valid = false
++				}
++			}
++			if !valid {
++				reject(w, 403, patch.ID, diagnostics)
++				return
++			}
++		}
+ 		request, err := http.NewRequestWithContext(r.Context(), r.Method, strings.TrimRight(*origin, "/")+r.URL.RequestURI(), bytes.NewReader(body))
+ 		if err != nil {
+ 			reject(w, 502, "origin_unavailable", diagnostics)
+ 			return
+ 		}
+ 		copyHeaders(request.Header, r.Header)
+ 		response, err := client.Do(request)
+ 		if err != nil {
+ 			reject(w, 502, "origin_unavailable", diagnostics)
+ 			return
+ 		}
+ 		defer response.Body.Close()
+ 		var responseReader io.Reader = response.Body
+ 		if policy.Response != nil {
+ 			responseReader = io.LimitReader(response.Body, policy.Response.MaxBytes+1)
+ 		}
+ 		content, err := io.ReadAll(responseReader)
+ 		if err != nil {
+ 			reject(w, 502, "origin_unavailable", diagnostics)
+ 			return
+ 		}
+ 		if protection := policy.Response; protection != nil {
+ 			if int64(len(content)) > protection.MaxBytes {
+ 				reject(w, 502, "response_too_large", diagnostics)
+ 				return

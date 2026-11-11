@@ -5,6 +5,10 @@ inbound WAF, and `v3` carries the operability fixes and strengthened grader.
 Keeping the same stage IDs does not make the retired tester compatible. A local
 pass does not update the hosted tester.
 
+The current ten-stage course removes rate limiting (`ou9`). Publish a matching
+tester before updating the hosted course. Response inspection (`as4`) and virtual
+patching (`mu9`) keep their slugs and now occupy Stages 9 and 10.
+
 Course CI pins an SDK revision that downloads release archives through GitHub's
 asset API. The public release-download route returned repeated `504` responses
 during the v3 rollout while the asset API served the same archive successfully.

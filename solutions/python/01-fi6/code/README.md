@@ -10,7 +10,7 @@ External client -> Your WAF -> Protected application server
 ```
 
 Start with a working proxy, then add rule matching, normalized inspection, ML
-scores, body limits, rate limiting, response checks, and a virtual patch for an
+scores, body limits, response checks, and a virtual patch for an
 export endpoint. The application is the origin server. The detector is a
 separate trusted service; it does not handle client requests on the
 application's behalf.

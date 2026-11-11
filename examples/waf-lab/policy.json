@@ -52,13 +52,6 @@
   "inspection": {
     "max_body_bytes": 4096
   },
-  "rate_limit": {
-    "requests": 3,
-    "window_seconds": 2,
-    "paths": [
-      "/login"
-    ]
-  },
   "response": {
     "max_bytes": 65536,
     "deny_patterns": [

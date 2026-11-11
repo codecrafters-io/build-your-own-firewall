@@ -28,9 +28,8 @@ the WAF permits.
 | 6   | [Add ML detection](stage_descriptions/base-06-xd5.md)            | A score service is integrated with validation, timeouts, and a visible fallback.            |
 | 7   | [Tune detection decisions](stage_descriptions/base-07-si3.md)    | Route thresholds combine rule and ML evidence; a low ML score cannot cancel strong rules.   |
 | 8   | [Inspect request bodies](stage_descriptions/base-08-qe5.md)      | JSON and form values are inspected; oversized or unsupported bodies never reach the origin. |
-| 9   | [Rate limit clients](stage_descriptions/base-09-ou9.md)          | A client cannot evade its window by changing ports or forwarding headers.                   |
-| 10  | [Prevent response leaks](stage_descriptions/base-10-as4.md)      | Protected response content is withheld before any origin bytes escape.                      |
-| 11  | [Virtually patch an endpoint](stage_descriptions/base-11-mu9.md) | Private-field exports are denied while public-field exports still work.                     |
+| 9   | [Prevent response leaks](stage_descriptions/base-09-as4.md)      | Protected response content is withheld before any origin bytes escape.                      |
+| 10  | [Virtually patch an endpoint](stage_descriptions/base-10-mu9.md) | Private-field exports are denied while public-field exports still work.                     |
 
 Every stage begins with a single implementation goal and a short motivation. The
 lesson defines the externally visible behavior and any domain concept needed to
@@ -82,5 +81,5 @@ The WAF curriculum requires a coordinated tester release. See
 [the release procedure](RELEASING.md) before enabling it for hosted learners.
 
 The base course uses complete, uncompressed HTTP messages. It does not claim
-production-grade coverage of HTTP parsing, attack detection, distributed rate
-limits, or application authorization.
+production-grade coverage of HTTP parsing, attack detection, or application
+authorization.

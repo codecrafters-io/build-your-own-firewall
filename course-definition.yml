@@ -25,7 +25,7 @@ marketing:
       Your firewall inspects requests before forwarding them and checks responses before returning them to clients. It can block a request before the application processes it or withhold a response containing protected data.
 
 
-      Across eleven stages, you''ll extend the same program, keeping earlier behavior working as you add each capability.'
+      Across ten stages, you''ll extend the same program, keeping earlier behavior working as you add each capability.'
   - question_markdown: Where does machine learning fit?
     answer_markdown: 'A separate trusted detector scores HTTP inspection inputs. Your firewall calls it with a deadline, validates the result, combines its score with policy, and reports when detection is unavailable. A supplied small pretrained classifier lets you exercise real inference locally without an API key or model-training prerequisites.'
   - question_markdown: What is the final challenge?
@@ -72,10 +72,6 @@ stages:
   name: Inspect request bodies
   difficulty: medium
   marketing_md: In this stage, you'll inspect structured request bodies within a strict size limit.
-- slug: ou9
-  name: Rate limit clients
-  difficulty: medium
-  marketing_md: In this stage, you'll limit requests from each client within a fixed time window.
 - slug: as4
   name: Prevent response leaks
   difficulty: hard

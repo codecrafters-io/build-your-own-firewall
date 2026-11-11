@@ -35,9 +35,11 @@ Add an optional `decisions` object:
 }
 ```
 
-Use the first route whose `path` exactly matches the once-decoded request path,
-case-sensitively. The query string is excluded. If no route matches, use
-`default`. `/articles/extra` and `/Articles` do not match `/articles`.
+Use the first route whose `path` exactly matches the once-percent-decoded
+request path, case-sensitively, without NFKC normalization or case folding. This
+applies even when inspection normalization is disabled. The query string is
+excluded. If no route matches, use `default`. `/articles/extra` and `/Articles`
+do not match `/articles`.
 
 ### Expected decisions
 
@@ -75,8 +77,9 @@ With the policy above:
 | `/search`         | 5               | 10       | `heuristic_high`  |
 | `/articles`       | 5               | 10       | Allow             |
 
-The last request can still be blocked by the standalone heuristic cutoff if the
-detector fails. That difference is part of the specified fallback.
+The final example (`/articles` with heuristic score `5`) can still be blocked by
+the standalone heuristic cutoff if the detector fails. That difference is part
+of the specified fallback.
 
 An allowed request must reach the origin unchanged. A combined block must return
 HTTP `403` with:
@@ -114,7 +117,7 @@ denylist precedence.
 
 - These are teaching thresholds, not production recommendations. A route
   override changes score thresholds. It cannot disable denylist matches or the
-  later size, rate, response, and virtual-patch controls.
+  later size, response, and virtual-patch controls.
 - Each thresholds object supplies all four fields as positive integers. Route
   matching uses the original decoded path even when inspection uses a
   case-folded copy. Changing the inspection representation must not change
