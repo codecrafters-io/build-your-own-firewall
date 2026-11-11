@@ -1,11 +1,1 @@
-hints:
-  - title_markdown: How do I preserve traffic while proxying?
-    body_markdown:
-      Use http.client.HTTPConnection to send the original method, target, and
-      raw body. Its putrequest, putheader, and endheaders methods let you copy
-      each header occurrence without collapsing repeated headers into a dict.
-      Let the connection supply the origin Host and set Content-Length for the
-      bytes you send. HTTP error statuses and redirects are ordinary responses
-      with this client. Catch OSError and http.client.HTTPException, including
-      IncompleteRead, and return the prescribed 502 if the complete response
-      cannot be read. Close the connection when finished.
+hints: []
