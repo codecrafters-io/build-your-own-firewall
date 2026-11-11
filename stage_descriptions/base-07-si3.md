@@ -141,7 +141,7 @@ coverage. Check legitimate traffic as well as attack probes when tuning policy.
 
 - These are teaching thresholds, not production recommendations. A route
   override changes score thresholds. It cannot disable denylist matches or the
-  later size, response, and virtual-patch controls.
+  size, response, and virtual-patch controls covered in later stages.
 - Each thresholds object supplies all four fields as positive integers. Route
   matching uses the original decoded path even when inspection uses a
   case-folded copy. Changing the inspection representation must not change
