@@ -1,4 +1,4 @@
-@@ -205,50 +205,63 @@
+@@ -198,50 +198,63 @@
                  if ml_score is not None:
                      diagnostics["X-WAF-ML-Score"] = str(ml_score)
                      if not match and ml_score >= classifier["threshold"]:
@@ -37,19 +37,17 @@
 +                    if not valid:
 +                        self.reject(403, patch["id"], diagnostics)
 +                        return
+             connection = http.client.HTTPConnection(origin.hostname, origin.port, timeout=3)
              try:
                  excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(self.headers.get_all("Connection", [])).split(",")}
-                 headers = {key: value for key, value in self.headers.items()
-                            if key.lower() not in excluded and key.lower() != "host"
-                            and not key.lower().startswith("x-waf-")}
-                 request = urllib.request.Request(args.origin.rstrip("/") + self.path,
-                     data=body if length or self.command in {"POST", "PUT", "PATCH"} else None,
-                     headers=headers, method=self.command)
-                 try:
-                     response = opener.open(request, timeout=3)
-                 except urllib.error.HTTPError as error:
-                     response = error
-                 with response:
+                 connection.putrequest(self.command, self.path, skip_accept_encoding=True)
+                 for key, value in self.headers.items():
+                     if (key.lower() not in excluded and key.lower() != "host"
+                             and not key.lower().startswith("x-waf-")):
+                         connection.putheader(key, value)
+                 connection.putheader("Content-Length", str(len(body)))
+                 connection.endheaders(body)
+                 with connection.getresponse() as response:
                      response_policy = policy.get("response")
                      content = response.read(response_policy["max_bytes"] + 1) if response_policy else response.read()
                      if response_policy:
@@ -62,3 +60,5 @@
                          try:
                              candidates.extend(strings(json.loads(content,
                                  object_pairs_hook=lambda pairs: [item for pair in pairs for item in pair],
+                                 parse_constant=invalid_constant)))
+                         except (ValueError, UnicodeError):

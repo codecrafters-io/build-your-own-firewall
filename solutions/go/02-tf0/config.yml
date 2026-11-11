@@ -2,7 +2,9 @@ hints:
   - title_markdown: How do I preserve traffic while proxying?
     body_markdown:
       Create an upstream http.Request using the original method, RequestURI, and
-      body bytes. Copy end-to-end headers while removing connection-specific and
+      body bytes. Install the handler directly on http.Server so ServeMux does
+      not clean dot segments or redirect paths before forwarding. Copy
+      end-to-end headers while removing connection-specific and
       X-WAF headers. http.Client follows redirects by default; set CheckRedirect
       to return http.ErrUseLastResponse. Disable automatic compression to
       preserve response bytes.

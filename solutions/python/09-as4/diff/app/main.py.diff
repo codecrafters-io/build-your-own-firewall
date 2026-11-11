@@ -1,12 +1,10 @@
-@@ -1,38 +1,38 @@
+@@ -1,36 +1,36 @@
  import argparse
  import http.client
 -import time
 -import threading
  import socket
  import json
- import urllib.error
- import urllib.request
  from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
  from pathlib import Path
  import re
@@ -14,11 +12,6 @@
  import urllib.parse
 +import threading
 +import time
-
-
- class NoRedirect(urllib.request.HTTPRedirectHandler):
-     def redirect_request(self, request, fp, code, message, headers, new_url):
-         return None
 
 
  HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -39,7 +32,14 @@
          if part:
              key, _, value = part.partition("=")
              decode_component(key, True)
-@@ -218,46 +218,64 @@
+             values.append(decode_component(value, True))
+     return values
+
+
+ def canonical(value):
+@@ -209,48 +209,66 @@
+                 match = next((rule["id"] for rule in policy.get("denylist", [])
+                               if any(rule["term"] in value for value in inputs)), None)
                  if not match:
                      if score >= thresholds["heuristic_high"]:
                          match = "heuristic_high"
@@ -52,19 +52,17 @@
                      self.reject(403, match, diagnostics)
                      return
                  diagnostics["X-WAF-Match"] = match
+             connection = http.client.HTTPConnection(origin.hostname, origin.port, timeout=3)
              try:
                  excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(self.headers.get_all("Connection", [])).split(",")}
-                 headers = {key: value for key, value in self.headers.items()
-                            if key.lower() not in excluded and key.lower() != "host"
-                            and not key.lower().startswith("x-waf-")}
-                 request = urllib.request.Request(args.origin.rstrip("/") + self.path,
-                     data=body if length or self.command in {"POST", "PUT", "PATCH"} else None,
-                     headers=headers, method=self.command)
-                 try:
-                     response = opener.open(request, timeout=3)
-                 except urllib.error.HTTPError as error:
-                     response = error
-                 with response:
+                 connection.putrequest(self.command, self.path, skip_accept_encoding=True)
+                 for key, value in self.headers.items():
+                     if (key.lower() not in excluded and key.lower() != "host"
+                             and not key.lower().startswith("x-waf-")):
+                         connection.putheader(key, value)
+                 connection.putheader("Content-Length", str(len(body)))
+                 connection.endheaders(body)
+                 with connection.getresponse() as response:
 -                    content = response.read()
 +                    response_policy = policy.get("response")
 +                    content = response.read(response_policy["max_bytes"] + 1) if response_policy else response.read()
@@ -95,8 +93,10 @@
                          self.send_header(key, value)
                      self.end_headers()
                      self.wfile.write(content)
-             except (OSError, urllib.error.URLError, http.client.HTTPException):
+             except (OSError, http.client.HTTPException):
                  self.reject(502, "origin_unavailable", diagnostics)
+             finally:
+                 connection.close()
 
          do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request
 

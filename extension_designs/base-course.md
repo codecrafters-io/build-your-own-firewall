@@ -6,6 +6,123 @@ against the supplied teaching rubric. The course slug and stage IDs remain
 stable identifiers. Earlier `base-NN-*.md` design records describe the retired
 AI gateway exercises; they are historical, not contracts for this course.
 
+## Fresh implementations from the starters, 2026-11-11
+
+Started two separate projects from the compiled Python and Go starters, then
+implemented each stage incrementally using the shared lessons and the
+learner-facing language hints for stages 1-3. No reference implementation,
+solution diff, grader source, fixture source, or model weights were opened in
+this pass. The supplied launchers, dependency files, and project configuration
+remained unchanged. Go uses `httputil.ReverseProxy` with buffered response
+inspection. Python uses `http.client` with one response-writing path.
+
+Every newly completed checkpoint passed its first positive-stage run through
+the actual tester CLI. Before adding each new capability, its preceding-stage
+implementation failed the next stage for the missing behavior, not a build or
+startup failure. The grader binary and initial learner materials were frozen
+before implementation began.
+
+| Checkpoint | Python stages passed | Go stages passed |
+| ---------- | -------------------- | ---------------- |
+| 1          | 1                    | 1                |
+| 2          | 1-2                  | 1-2              |
+| 3          | 1-3                  | 1-3              |
+| 4          | 1-4                  | 1-4              |
+| 5          | 1-5                  | 1-5              |
+| 6          | 1-6                  | 1-6              |
+| 7          | 1-7                  | 1-7              |
+| 8          | 1-8                  | 1-8              |
+| 9          | 1-9                  | 1-9              |
+| 10         | 1-10                 | 1-10             |
+
+Results: twenty current-stage passes, ninety additional earlier-stage passes,
+and eighteen expected preceding-stage rejections. All fifty-five Go
+stage/checkpoint combinations also passed with Go 1.25.0, the starter module's
+minimum compiler. Primary runs used Python 3.14.6 and Go 1.27.3 on macOS ARM64.
+The final runs include the real-model replay and earlier failure-path checks.
+
+The current instructions and supplied hints were sufficient for this
+walkthrough. No instruction changes, grader changes, fixture-specific
+exceptions, new dependencies, or corrections after a failed implementation run
+were needed. Standard Go build/dependency caches were prepared before timed
+startup checks, as in the course build environment.
+
+The evidence archive `firewall-starter-walkthrough.zip` contains pristine
+starters, twenty complete checkpoints, source hashes, exact learner materials,
+full CLI logs, the frozen grader, and a replay script. Its SHA256 is
+`3059f3a7c7cbe69e6e1d45c31eb510f075d686ac0e8d0c159ac1f7bcef3000b7`.
+Course explanations changed elsewhere during the run. Their completion diff is
+included; the examples and contract tables were unchanged, and the reviewed
+prose changes did not alter the tested behavior.
+
+This was fresh implementation work, but the author had seen references during
+the preceding review, so it was not a blinded trial. It demonstrates that an
+experienced implementer could satisfy every stage from the learner materials
+without test-specific workarounds. No hosted submission or release was made.
+
+## Learner-path audit, 2026-11-11
+
+Reviewed the ten lesson contracts alongside the cumulative Go and Python
+implementations and active HTTP grader. The audit ran the supplied references
+for all twenty language/stage combinations. These are reference walkthroughs,
+not twenty independently authored learner solutions. Learner grading observes
+HTTP behavior, detector calls, and origin traffic rather than inspecting a
+learner's source code.
+
+The existing suite passed before changes, but the audit reproduced a real
+Python forwarding bug and identified several gaps in what that pass proved:
+
+- Python converted request headers to a dictionary, dropping all but one
+  occurrence of a repeated application header. The proxy now uses
+  `http.client.HTTPConnection` and sends each preserved header occurrence.
+  All nine cumulative references from proxying onward and the Python proxy hint
+  use this approach. The Go proxy hint also explains how to avoid ServeMux
+  redirects before forwarding. The corresponding solution patches were
+  regenerated.
+- The signal-list assertion rejected normal optional whitespace after commas.
+  It now accepts that whitespace while still rejecting missing, repeated, or
+  extra IDs. Positive regression checks cover both whitespace and combined
+  list-valued application headers so normal HTTP formatting is not an obstacle.
+- Detector call counts were enforced only for probes specifying exact inputs.
+  They are now enforced for every probe. The old no-call assertion also
+  incorrectly treated an origin HTTP 400 as a validation failure. A new case
+  verifies that an origin error retains detector diagnostics and its status.
+- Previous-stage rejection covered Python only. It now checks both languages.
+  Additional cases below cover documented behavior without requiring a later
+  stage's capability. Every protocol probe now logs its method, target,
+  headers, and body for reproduction.
+
+| Stage        | Additional evidence tied to the lesson                                                                                                                                                                   |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Health    | Repeated local health requests work with the origin offline.                                                                                                                                             |
+| 2. Proxy     | Repeated request headers, repeated response cookies, Content-Type preservation, generic reserved-header removal, and redirects with a real Location target.                                              |
+| 3. Block/log | Policy precedence spans target and body inputs, while raw escapes and field boundaries remain intact.                                                                                                    |
+| 4. Normalize | Path validation with normalization disabled, ignored header inspection in that mode, and path-plus/one-layer boundaries.                                                                                 |
+| 5. Score     | Distinct signals combine across inputs, repeated occurrences count once, custom weights work in log mode, and health skips diagnostics.                                                                  |
+| 6. ML        | Universal call counts, raw and normalized input boundaries, repeated header occurrences, score 100, configurable cutoffs, and origin-error diagnostics.                                                  |
+| 7. Decisions | Outage fallback uses the standalone heuristic cutoff, route decoding is independent of normalization, the first matching route wins, and both moderate cutoffs are required.                             |
+| 8. Bodies    | Nested and escaped duplicate keys, invalid form names/UTF-8, media-type case, JSON values versus keys/scalars, and repeated forms without normalization.                                                 |
+| 9. Responses | An exact byte limit passes, oversized reads stop before a slow tail, size denial precedes matching, strings stay separate, malformed JSON uses raw inspection, and request diagnostics survive a denial. |
+| 10. Patches  | Every matching patch must pass in policy order, malformed/missing/non-object arguments fail, earlier blocks and validation keep precedence, and a patch replaces a logged match while retaining scores.  |
+
+The strengthened suite passed all twenty current-stage references and all
+eighteen previous-stage rejection checks. Eighteen grader regression checks
+also passed: fifteen deliberately broken references were rejected and three
+valid variations were accepted. The five Python model checks passed. All twenty
+solution patches reconstruct their exact cumulative sources, and Python syntax
+and Git whitespace checks passed. The actual tester CLI also accepted both
+starter projects with their supplied health-check code uncommented and both
+final references, including the complete visible replay. The redirect fixture
+now supplies and checks a Location header, and a deliberate redirect-following
+implementation fails it.
+
+No fixture-specific branch or hardcoded attack, rule ID, export route, or
+application record was needed in the reference implementations. The stage tests
+continue to require successful legitimate traffic alongside denials. This audit
+checks the documented teaching contracts, not exhaustive HTTP or detection
+coverage. The coordinated tester must still be released and selected before
+these local fixes affect hosted learners.
+
 ## Rate-limiting removal, 2026-11-11
 
 The active base course now has ten stages. Rate limiting (`ou9`) is removed from

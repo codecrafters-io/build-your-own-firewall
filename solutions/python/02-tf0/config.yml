@@ -1,10 +1,11 @@
 hints:
   - title_markdown: How do I preserve traffic while proxying?
     body_markdown:
-      Use urllib.request.Request with the original method and raw body. Catch
-      HTTPError as a readable origin response instead of converting it to 502.
-      Catch http.client.HTTPException too, including IncompleteRead, and return
-      the prescribed 502 if the complete origin response cannot be read. Build
-      an opener with an empty ProxyHandler and a redirect handler that does not
-      follow redirects. Copy the required headers and recalculate
-      Content-Length.
+      Use http.client.HTTPConnection to send the original method, target, and
+      raw body. Its putrequest, putheader, and endheaders methods let you copy
+      each header occurrence without collapsing repeated headers into a dict.
+      Let the connection supply the origin Host and set Content-Length for the
+      bytes you send. HTTP error statuses and redirects are ordinary responses
+      with this client. Catch OSError and http.client.HTTPException, including
+      IncompleteRead, and return the prescribed 502 if the complete response
+      cannot be read. Close the connection when finished.

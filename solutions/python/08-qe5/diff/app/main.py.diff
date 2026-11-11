@@ -1,4 +1,4 @@
-@@ -22,50 +22,78 @@
+@@ -15,50 +15,78 @@
                 "te", "trailer", "transfer-encoding", "upgrade", "content-length"}
 
 
@@ -77,7 +77,7 @@
                             json.dumps({"inputs": inputs}),
                             {"Content-Type": "application/json"})
          with connection.getresponse() as response:
-@@ -93,64 +121,90 @@
+@@ -86,64 +114,90 @@
      policy = json.loads(Path(args.policy).read_text())
 
      class Handler(BaseHTTPRequestHandler):
