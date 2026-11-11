@@ -19,7 +19,7 @@ marketing:
     answer_markdown: 'You''ll build an inbound web application firewall: external client -> your WAF -> protected application server. Your program inspects HTTP requests before the application receives them and checks responses before returning them to the client.
 
 
-      Across eleven stages, you''ll add literal rules, normalized inputs, weighted attack signals, ML scores, route-specific decisions, bounded body inspection, per-client rate limits, response-leak prevention, and an endpoint-specific virtual patch. Each stage keeps the preceding behavior working.'
+      Across eleven stages, you''ll teach your proxy to recognize suspicious requests, handle attempts to disguise them, combine rule-based and machine-learning scores, and enforce traffic limits. You''ll also prevent sensitive response data from reaching clients. Finally, you''ll protect a vulnerable export endpoint by blocking requests for private fields while keeping legitimate exports working. Each stage builds on the behavior you''ve already implemented.'
   - question_markdown: Where does machine learning fit?
     answer_markdown: 'A separate trusted detector scores HTTP inspection inputs. Your WAF calls it with a deadline, validates the result, combines its score with policy, and reports when detection is unavailable. A supplied small pretrained classifier lets you exercise real inference locally without an API key or model-training prerequisites.
 
