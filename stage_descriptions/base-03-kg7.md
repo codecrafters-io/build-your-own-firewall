@@ -3,11 +3,14 @@ mode.
 
 ### Why block before forwarding?
 
-If an application includes unescaped user input in an HTML response, a payload
-containing `<script>` can execute attacker-controlled JavaScript in another
-user's browser (Cross-Site Scripting). Stopping matching requests at the
-firewall prevents them from reaching a vulnerable route without changing the
-application server.
+If an application inserts user input into an HTML page without escaping it, the
+browser may treat that input as code. An attacker could exploit this by
+submitting a `<script>` tag that runs JavaScript in another user's browser.
+This is called Cross-Site Scripting (XSS). A firewall can block requests
+containing recognizable attack patterns before they reach the application,
+providing some protection without changing the application's code. It can catch
+some XSS attempts, but the application still needs to escape user input correctly
+when inserting it into HTML.
 
 Because literal token rules can also match benign traffic, such as a user
 discussing HTML tags in a comment, teams can evaluate new policies in `log` mode
