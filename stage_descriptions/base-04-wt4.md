@@ -9,14 +9,17 @@ rule looking for `<script` will miss `%3Cscript` in a query string that the web
 framework percent-decodes, or full-width `＜ＳＣＲＩＰＴ` if a downstream
 component applies compatibility normalization and case folding.
 
-With normalization enabled, your firewall builds a separate _inspection view_:
-it decodes one layer of percent encoding in paths and query components, then
-applies Unicode NFKC normalization followed by case folding to each inspection
-input. These transformations affect inspection copies only. This course defines
-a fixed inspection pipeline. In production, those transformations must account
-for how the protected application actually interprets inputs.
+An _inspection view_ is a transformed copy used for matching. Keep original bytes
+for forwarding: rewriting an allowed request can change its meaning or break a
+signature over its contents. This course uses a fixed pipeline; in production,
+it must account for how the protected application actually interprets inputs.
 
 ### The inspection view
+
+Extra decoding can make harmless text look like an attack: the search application
+decodes `%253Cscript` once to `%3Cscript`, not `<script`. Joining separate inputs
+can likewise invent a match, such as `union` in one parameter and ` select` in
+another. Decode once and inspect inputs separately.
 
 Add these optional policy fields:
 
@@ -44,8 +47,9 @@ With normalization enabled, query parameters are separated by `&`, and the first
 Its name is validated but not inspected. Preserve repeated values as independent
 inputs.
 
-Validate percent escapes and decoded UTF-8 in the path even when normalization
-is disabled. When normalization is enabled, also validate query names and
+Malformed encodings have no reliable decoded inspection view. Validate percent
+escapes and decoded UTF-8 in the path even when normalization is disabled.
+When normalization is enabled, also validate query names and
 values, but do not inspect query names. An invalid path or query escape or
 invalid decoded UTF-8 returns HTTP `400`, JSON `error.rule: "invalid_request"`,
 before the origin is contacted. The Notes section covers malformed paths
@@ -54,10 +58,10 @@ rejected by the HTTP server itself.
 Inspect each occurrence of a configured header as a separate input. Do not split
 a header value on commas.
 
-For every inspection input, apply **Unicode NFKC normalization, then case
-folding**. NFKC combines compatibility forms such as full-width letters. Case
-folding handles caseless matching, including `Straße` -> `strasse`. Policy terms
-are already in this canonical form.
+NFKC combines compatibility forms such as full-width letters. Case folding
+handles caseless matching, including `Straße` -> `strasse`. For every inspection
+input, apply **Unicode NFKC normalization, then case folding**. Policy terms are
+already in this canonical form.
 
 ### Expected behavior
 

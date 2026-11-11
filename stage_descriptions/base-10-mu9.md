@@ -12,6 +12,10 @@ working.
 
 ### Patch policy
 
+An allowlist names the fields known to be safe. Only forbidding `password_hash`
+would miss another private field added later. Method and path matching confine
+the patch to the operation with the known flaw.
+
 Add an optional list of `virtual_patches`:
 
 ```json
@@ -34,6 +38,10 @@ encoded `/api/%65xport` therefore matches `/api/export`. `/api/export/extra`
 does not.
 
 ### Expected behavior
+
+This patch enforces a known application constraint, so log mode and detector
+outages must not suspend it. Rejecting an invalid export gives the caller a clear
+failure; silently deleting fields would execute a different request.
 
 For a matching route, the body must be one valid JSON object with the configured
 top-level argument. That argument must be a nonempty array consisting entirely

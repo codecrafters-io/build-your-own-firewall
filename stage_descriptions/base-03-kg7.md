@@ -6,11 +6,10 @@ mode.
 If an application inserts user input into an HTML page without escaping it, the
 browser may treat that input as code. An attacker could exploit this by
 submitting a `<script>` tag that runs JavaScript in another user's browser.
-This is called Cross-Site Scripting (XSS). A firewall can block requests
-containing recognizable attack patterns before they reach the application,
-providing some protection without changing the application's code. It can catch
-some XSS attempts, but the application still needs to escape user input correctly
-when inserting it into HTML.
+This is called Cross-Site Scripting (XSS). Blocking recognizable patterns before
+they reach the application can catch some attempts without changing its code.
+The application still needs to escape user input correctly when inserting it
+into HTML.
 
 Because literal token rules can also match benign traffic, such as a user
 discussing HTML tags in a comment, teams can evaluate new policies in `log` mode
@@ -43,6 +42,10 @@ or decode percent escapes yet. Read rule IDs and terms from policy.
   stages.
 
 ### Expected decisions
+
+Callers need to know which rule acted without receiving reflected attack content
+or private request data. Use a rule ID in the response, and keep diagnostics
+local to each request so a previous match cannot mislead the next caller.
 
 | Situation             | Client result                                                  | Origin receives request? |
 | --------------------- | -------------------------------------------------------------- | ------------------------ |

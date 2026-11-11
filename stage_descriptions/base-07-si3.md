@@ -35,6 +35,8 @@ Add an optional `decisions` object:
 }
 ```
 
+Exact matching confines route tuning to its intended endpoint; decoding ensures
+an encoded spelling such as `/articl%65s` selects the same policy as `/articles`.
 Use the first route whose `path` exactly matches the once-percent-decoded
 request path, case-sensitively, without NFKC normalization or case folding. This
 applies even when inspection normalization is disabled. The query string is
@@ -42,6 +44,10 @@ excluded. If no route matches, use `default`. `/articles/extra` and `/Articles`
 do not match `/articles`.
 
 ### Expected decisions
+
+If a low ML score could cancel strong rule evidence, lowering the model's score
+would also bypass your rules. Let either strong signal block on its own, and
+require both signals when neither is strong enough alone.
 
 When classification succeeds, these route decisions replace the separate
 heuristic and classifier cutoffs. Denylist rules still win first. Otherwise,
@@ -54,11 +60,9 @@ evaluate the selected thresholds in this order:
 | ML score is at least `ml_medium` **and** heuristic score is at least `heuristic_medium` | `combined_scores` |
 | None of these conditions                                                                | Allow             |
 
-All comparisons are inclusive. The two scores describe the same HTTP request. A
-low ML score never cancels strong rule evidence. Otherwise, an attacker who
-lowers the model's score would also bypass your rules. The ML score can add a
-block, and only the selected route's `heuristic_high` decides when rule evidence
-alone blocks. Keep the earlier block/log behavior and diagnostic headers.
+All comparisons are inclusive. The two scores describe the same HTTP request.
+Only the selected route's `heuristic_high` decides when rule evidence alone
+blocks. Keep the earlier block/log behavior and diagnostic headers.
 
 If the detector is unavailable, retain the earlier denylist and standalone
 heuristic cutoff. Route thresholds do not apply to that fallback. Without

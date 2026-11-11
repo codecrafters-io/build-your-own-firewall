@@ -14,6 +14,10 @@ probability.
 
 ### Policy
 
+Repeated `--` in a legitimate article is still one kind of evidence. Counting
+distinct signals prevents repetition alone from turning one weak signal into
+several reasons to block.
+
 Add an optional `heuristics` object alongside earlier fields:
 
 ```json
@@ -41,6 +45,9 @@ Signals in different inputs can contribute to the same request score.
 If a denylist rule matches, it still supplies the decision. Otherwise, a score
 greater than or equal to `threshold` selects `heuristic_score`, using the
 existing block/log behavior. Without `heuristics`, retain earlier behavior.
+
+Diagnostics help explain decisions and tune false positives. Scores on allowed
+requests show how close legitimate traffic comes to the cutoff.
 
 With heuristics configured, report complete diagnostics on the client-facing
 response for every inspected request, including allowed requests, log-mode

@@ -20,17 +20,18 @@ redirect. Keep the process running so it can answer subsequent requests. Health
 checks must not contact the application or detector, nor depend on policy
 contents.
 
-The starter accepts three flags. Keep this interface throughout the challenge:
+The application is also called the **origin**: it is the server your firewall
+will forward requests to. The detector is a separate service that scores
+inspection inputs in later stages.
+
+Service addresses and policy paths vary between runs. The starter accepts three
+flags so the caller can supply them. Keep this interface throughout the challenge:
 
 | Flag         | Meaning                                                                |
 | ------------ | ---------------------------------------------------------------------- |
 | `--origin`   | The protected application's base URL, without a path or trailing slash |
 | `--detector` | A separate ML detector's base URL                                      |
 | `--policy`   | An absolute path to a trusted JSON policy file                         |
-
-The application is also called the **origin**: it is the server your firewall
-will forward requests to. The detector is a separate service that scores
-inspection inputs in later stages.
 
 ### Tests
 

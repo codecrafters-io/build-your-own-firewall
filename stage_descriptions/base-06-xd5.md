@@ -10,6 +10,9 @@ explicit fallback rather than treating its answer as unquestionable.
 
 ### Detector contract
 
+The detector needs inspection strings, not the client's application credentials.
+Scoring even known rule matches lets you compare model evidence with your rules.
+
 With `classifier` configured, make exactly one `POST` to `<detector>/classify`
 for each inspected request, including requests matching earlier rules. Use
 `Content-Type: application/json` and this shape:
@@ -32,7 +35,8 @@ Health checks and requests rejected during input validation make no detector
 call and include no detector diagnostic headers. An origin `400` response is
 different: inspection and detection have already occurred before forwarding.
 
-A successful result is HTTP `200` with exactly one JSON object:
+An error page or malformed score must not become a policy decision. A successful
+result is HTTP `200` with exactly one JSON object:
 
 ```json
 { "score": 92 }
@@ -54,13 +58,18 @@ Denylist matches have first priority, then the earlier heuristic cutoff. If
 neither matches and the detector score is at least the classifier threshold,
 select `ml_score`. Use the earlier block/log responses.
 
+A slow detector must not hold requests open indefinitely. A deadline that
+restarts with each byte would still allow a trickling reply to do that.
+
 Each detector request has a **200 ms total deadline**, including connecting and
 reading response headers and the complete body. Receiving another byte does not
 restart the deadline. Do not retry or follow redirects. Any transport failure,
-timeout, non-`200` status, or invalid response makes detection unavailable. Fall
-back to the earlier denylist and heuristic rules. Detector failure alone does
-not reject the request. This is a **fail-open** policy: it preserves
-availability while losing this detector's protection.
+timeout, non-`200` status, or invalid response makes detection unavailable.
+
+To preserve availability during a detector outage, this course uses a
+**fail-open** policy: fall back to the earlier denylist and heuristic rules.
+Detector failure alone does not reject the request. Diagnostics make the loss of
+ML protection visible.
 
 Include these diagnostics on client-facing responses, including forwarded
 responses and `403` blocks. Do not forward them upstream to the origin.

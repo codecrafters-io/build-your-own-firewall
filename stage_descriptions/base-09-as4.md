@@ -10,6 +10,10 @@ later denial cannot arrive after the protected bytes have escaped.
 
 ### Policy
 
+Buffering needs a memory bound; releasing an inspected prefix would leave the
+unchecked remainder free to expose a secret. The policy sets a body size limit
+and the patterns to withhold.
+
 Add an optional `response` object:
 
 ```json
@@ -26,14 +30,19 @@ These patterns are trusted policy, not values supplied by the client or origin.
 
 ### Expected behavior
 
-For every origin response, including error statuses, read no more than
-`max_bytes + 1` body bytes before sending anything to the client.
+One extra byte reveals an oversized response. For every origin response,
+including error statuses, read no more than `max_bytes + 1` body bytes before
+sending anything to the client.
 
 | Condition                | Client result                                            |
 | ------------------------ | -------------------------------------------------------- |
 | Body exceeds `max_bytes` | HTTP `502`, `error.rule: "response_too_large"`           |
 | A deny pattern matches   | HTTP `403`, `error.rule: "response_leak"`                |
 | Neither condition        | Original status, exact body bytes, and preserved headers |
+
+JSON escapes can hide a secret from raw-text matching, and either a key or a
+value can leak it. Search decoded strings as well as raw text, which also covers
+HTML error pages and malformed JSON.
 
 Size takes precedence over pattern inspection. Search the body decoded as UTF-8,
 replacing invalid byte sequences for inspection only. When the body is valid
@@ -50,11 +59,12 @@ For either denial, send `Content-Type: application/json`, the corresponding
 headers, including `X-Request-Id`. Error content must not echo the protected
 match.
 
+A protected response match identifies content the policy says must not leave.
 Response checks remain enforced when policy `mode` is `log`: a response denial
-still blocks the response and replaces any earlier log-mode `X-WAF-Match`
-header. Preserve request-detection diagnostic headers, including heuristic and
-ML scores, fired signals, and detector status. Without `response`, retain
-earlier relay behavior.
+still blocks the response and replaces any earlier log-mode `X-WAF-Match` header.
+Preserve request-detection diagnostic headers, including heuristic and ML scores,
+fired signals, and detector status. Without `response`, retain earlier relay
+behavior.
 
 An incomplete origin response still returns HTTP `502` with
 `error.rule: "origin_unavailable"`. Buffering within the size limit does not

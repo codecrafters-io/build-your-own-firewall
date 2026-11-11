@@ -24,8 +24,15 @@ the supplied origin URL.
 | Request   | Method, path, query, body bytes, and end-to-end headers, including `Authorization` and `Content-Type` | The upstream `Host` must name the origin host and port.   |
 | Response  | Status, body bytes, and end-to-end headers, including `Content-Type` and `X-Request-Id`               | Framing headers must describe the body you actually send. |
 
-Preserve JSON whitespace and escaping, empty bodies, and unknown fields. Relay
+Preserve JSON whitespace and escaping, empty bodies, and unknown fields.
+
+A redirect is an instruction for the client to make another request. Following
+it inside the firewall would hide the application's original response. Relay
 origin HTTP errors and redirects as responses. Do not follow a redirect.
+
+Once you send the origin's status or body, you cannot replace it if the connection
+fails midway. Buffering lets you return an error instead of a partial response;
+later, it will also let you check responses for secrets.
 
 Read the complete origin response body before sending its status, headers, or
 body to the client. If the origin connection fails or its response cannot be
@@ -38,18 +45,28 @@ read completely, return HTTP `502` with `Content-Type: application/json`,
 
 ### Header handling
 
-HTTP has headers that describe one connection rather than the complete
-client-to-application exchange. Apply these rules to both forwarded requests and
-origin responses. Match header names, names listed in `Connection`, and the
-`X-WAF-` prefix case-insensitively:
+Your firewall has separate connections to the client and origin. **Hop-by-hop
+headers** control one connection: a client's `Connection: close` should not
+decide whether the firewall keeps its origin connection open. Application
+headers such as `Content-Type` and `Authorization` still carry meaning for the
+application.
 
-- Remove `Connection`, `Keep-Alive`, `Proxy-Authenticate`,
-  `Proxy-Authorization`, `TE`, `Trailer`, `Transfer-Encoding`, and `Upgrade`.
+Apply these rules to both forwarded requests and origin responses. Match header
+names, names listed in `Connection`, and the `X-WAF-` prefix case-insensitively:
+
+- `Connection: X-Temporary` marks `X-Temporary` as connection-specific, even
+  though it is not in the fixed list. Remove `Connection`, `Keep-Alive`,
+  `Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailer`,
+  `Transfer-Encoding`, and `Upgrade`.
   Also remove any header named in the comma-separated `Connection` value.
-- Remove the incoming `Content-Length` rather than copying it. Your HTTP library
-  can supply valid framing for the body sent on the new connection.
-- Remove headers beginning with `X-WAF-`. They are reserved for your own
-  diagnostics, so neither the client nor the origin can forge your decisions.
+- Framing tells the receiver where the body ends and must match the outgoing
+  message. For example, a library can decode a chunked response into body bytes
+  that no longer contain chunk markers. Remove the incoming `Content-Length`
+  rather than copying it, and let your HTTP library supply valid framing.
+- Only your firewall should report its decisions. An origin-supplied
+  `X-WAF-Match: xss-script` could falsely label a clean request. Remove headers
+  beginning with `X-WAF-` in both directions; later stages add your own
+  diagnostics after cleanup.
 
 Preserve all remaining application headers.
 
@@ -116,5 +133,7 @@ without releasing origin content. An origin `400` must remain `400`.
   subset. Requests with bodies have a valid `Content-Length`.
 - Each proxied test request has a three-second deadline. Keep the earlier health
   behavior working even when the origin is unavailable. For the full protocol
-  rules, see [HTTP semantics](https://www.rfc-editor.org/rfc/rfc9110.html) and
-  [HTTP/1.1 message framing](https://www.rfc-editor.org/rfc/rfc9112.html).
+  rules, see
+  [HTTP connection-header rules](https://www.rfc-editor.org/rfc/rfc9110.html#section-7.6.1)
+  and
+  [HTTP/1.1 message framing](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3).
