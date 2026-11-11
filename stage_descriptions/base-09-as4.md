@@ -53,8 +53,8 @@ match.
 Response checks remain enforced when policy `mode` is `log`: a response denial
 still blocks the response and replaces any earlier log-mode `X-WAF-Match`
 header. Preserve request-detection diagnostic headers, including heuristic and
-ML scores, fired signals, and detector status. Without `response`, retain earlier
-relay behavior.
+ML scores, fired signals, and detector status. Without `response`, retain
+earlier relay behavior.
 
 An incomplete origin response still returns HTTP `502` with
 `error.rule: "origin_unavailable"`. Buffering within the size limit does not
@@ -62,33 +62,48 @@ make a truncated body safe to release.
 
 ### Tests
 
-The tester supplies response policy with `max_bytes: 128` and the deny pattern
-above, then starts your program like this. The service URLs and absolute policy
-path vary between runs:
+The tester starts the protected application and detector, writes the trusted
+policy, and starts your firewall with this interface. Addresses and the absolute
+policy path vary between runs:
 
 ```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-For this request, the origin returns HTTP `500` with the body below:
+Run the exercise with:
 
 ```bash
-curl --silent http://127.0.0.1:8080/debug
+codecrafters test
 ```
+
+The application's `/debug` route returns HTTP `500` with a dummy internal key.
+The tester prints that direct response, then sends the same request through your
+firewall with the response policy above:
+
+```bash
+curl --include http://127.0.0.1:8080/debug
+```
+
+The direct body is:
 
 ```json
 { "debug": "INTERNAL_KEY_7F2A" }
 ```
 
-The client must receive HTTP `403` and only a safe error body:
+The client must receive HTTP `403`, `X-WAF-Match: response_leak`, and only:
 
 ```json
 { "error": { "rule": "response_leak" } }
 ```
 
-The tester also checks escaped JSON values and keys, duplicate-key values,
-raw-text fallback for nonstandard JSON constants, invalid UTF-8 inspection, size
-limits, log-mode match replacement, and unchanged clean responses. An escaped
+Neither the key nor the origin `X-Request-Id` may escape. The output confirms
+that one request reached the application: response inspection withholds the
+result of processing rather than preventing that processing. A clean product
+search must still return `200` with product results.
+
+Other cases check escaped JSON values and keys, duplicate-key values, raw-text
+fallback for nonstandard JSON constants, invalid UTF-8 inspection, size limits,
+log-mode match replacement, and unchanged clean responses. An escaped
 `"\u0049NTERNAL_KEY_7F2A"` must be caught after JSON decoding. A clean response
 with partial marker `INTERNAL_` must pass unchanged when it fits the size limit.
 

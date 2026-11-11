@@ -1,4 +1,4 @@
 # Unified-diff context prefixes can precede Go tabs; validate the source instead.
 solutions/**/diff/** -whitespace
 # CSV fixtures use CRLF record endings, which are part of the training checksum.
-examples/waf-lab/*.csv whitespace=cr-at-eol
+model_development/*.csv whitespace=cr-at-eol

@@ -5,4 +5,4 @@ setup:
 
 test:
 	WAF_COURSE_DIR="$(CURDIR)" $(MAKE) -C ../firewall-tester test
-	python3 -m unittest discover -s examples/waf-lab -p 'test_*.py'
+	python3 -m unittest discover -s tests -p 'test_*.py'

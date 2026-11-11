@@ -8,18 +8,18 @@ AI gateway exercises; they are historical, not contracts for this course.
 
 ## Rate-limiting removal, 2026-11-11
 
-The active base course now has ten stages. Rate limiting (`ou9`) is removed
-from the lessons, cumulative references, lab policy, and active grader. Response
+The active base course now has ten stages. Rate limiting (`ou9`) is removed from
+the lessons, cumulative references, lab policy, and active grader. Response
 inspection (`as4`) and virtual patching (`mu9`) retain their slugs as Stages 9
 and 10. Verification records below describe the earlier eleven-stage course.
 
 The ten-stage `make test` run passed all 20 Go/Python references, nine
 preceding-stage rejection checks, eight grader regression checks, stage
-registration, and four model checks. Both final references also passed the
-real tester CLI. All 20 regenerated solution diffs reconstruct their sources.
-The real-model lab walkthrough preserved public exports, blocked private
-exports and response leaks, and allowed six rapid login requests in both
-languages. A matching tester release is still required for hosted rollout.
+registration, and four model checks. Both final references also passed the real
+tester CLI. All 20 regenerated solution diffs reconstruct their sources. The
+real-model lab walkthrough preserved public exports, blocked private exports and
+response leaks, and allowed six rapid login requests in both languages. A
+matching tester release is still required for hosted rollout.
 
 Response inspection now treats nonstandard JSON constants as raw-text input in
 both languages. Regression cases cover escaped versus raw markers in these
@@ -93,18 +93,18 @@ fields, and preservation. Essential domain concepts are supplemented with
 diagrams, wire examples, or tables. Authored language hints are limited to the
 first three stages; caveats and external sources are in notes.
 
-| Stage                           | Tease and motivation                                      | Define: observable outcome                                                               | Essential supplement                          | Hint / note placement                                                                    |
-| ------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| 1. Respond to health checks     | Make availability observable before proxying              | Repeated local HTTP 200 health checks within five seconds                                | Client/WAF/origin diagram and flag roles      | Server APIs in hints; temporary working directory in notes                               |
-| 2. Proxy web requests           | Preserve legitimate traffic before enforcement            | Original method, target, bytes, status, and end-to-end headers; 502 on transport failure | Reverse proxy and connection-header ownership | Library errors in hints; HTTP subset and specs in notes                                  |
-| 3. Block and log                | Stop matching attacks before the application              | Rule-named 403, log-mode forwarding, clean request isolation                             | Decision table and exact error shape          | Inspection copies in hints; literal-rule limits in notes                                 |
-| 4. Normalize request inputs     | Close a specified representation gap                      | Once-decoded fields and NFKC/case-folded inspection; original forwarding                 | Source-to-input table and one-layer examples  | Representation limits in notes                                                          |
-| 5. Score attack signals         | Combine several weak indicators                           | Distinct-signal sum, inclusive cutoff, complete diagnostics                              | Worked score table                            | Regex subset and CRS source in notes                                                    |
-| 6. Add ML detection             | Integrate a useful but fallible signal                    | One validated score call, 200 ms deadline, visible failure fallback                      | Request/reply examples and outcome headers    | Supplied-model limits in notes                                                          |
-| 7. Tune detection decisions     | Reduce a specified false positive without a global bypass | Exact-route thresholds, a rule-only floor, and explicit fallback precedence              | Score/route decision table                    | Path/inspection distinction in notes                                                    |
-| 8. Inspect request bodies       | Inspect what parsers consume without unbounded reads      | Recursive JSON values, forms, inclusive byte bound, 400/413/415 errors                   | Media-type and failure tables                 | Unsupported encodings and specs in notes                                                 |
-| 9. Prevent response leaks       | Withhold secrets that appear only after origin processing | Bounded scan before release, decoded JSON strings, safe denials                          | Origin-to-client before/after example         | Side effects and streaming in notes                                                     |
-| 10. Virtually patch an endpoint | Constrain a known flaw that detectors can miss            | Private-field denial and successful public-field export                                  | Exact method/path and allowed-value examples  | Application authorization responsibility in notes                                       |
+| Stage                           | Tease and motivation                                      | Define: observable outcome                                                               | Essential supplement                          | Hint / note placement                                      |
+| ------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------- |
+| 1. Respond to health checks     | Make availability observable before proxying              | Repeated local HTTP 200 health checks within five seconds                                | Client/WAF/origin diagram and flag roles      | Server APIs in hints; temporary working directory in notes |
+| 2. Proxy web requests           | Preserve legitimate traffic before enforcement            | Original method, target, bytes, status, and end-to-end headers; 502 on transport failure | Reverse proxy and connection-header ownership | Library errors in hints; HTTP subset and specs in notes    |
+| 3. Block and log                | Stop matching attacks before the application              | Rule-named 403, log-mode forwarding, clean request isolation                             | Decision table and exact error shape          | Inspection copies in hints; literal-rule limits in notes   |
+| 4. Normalize request inputs     | Close a specified representation gap                      | Once-decoded fields and NFKC/case-folded inspection; original forwarding                 | Source-to-input table and one-layer examples  | Representation limits in notes                             |
+| 5. Score attack signals         | Combine several weak indicators                           | Distinct-signal sum, inclusive cutoff, complete diagnostics                              | Worked score table                            | Regex subset and CRS source in notes                       |
+| 6. Add ML detection             | Integrate a useful but fallible signal                    | One validated score call, 200 ms deadline, visible failure fallback                      | Request/reply examples and outcome headers    | Supplied-model limits in notes                             |
+| 7. Tune detection decisions     | Reduce a specified false positive without a global bypass | Exact-route thresholds, a rule-only floor, and explicit fallback precedence              | Score/route decision table                    | Path/inspection distinction in notes                       |
+| 8. Inspect request bodies       | Inspect what parsers consume without unbounded reads      | Recursive JSON values, forms, inclusive byte bound, 400/413/415 errors                   | Media-type and failure tables                 | Unsupported encodings and specs in notes                   |
+| 9. Prevent response leaks       | Withhold secrets that appear only after origin processing | Bounded scan before release, decoded JSON strings, safe denials                          | Origin-to-client before/after example         | Side effects and streaming in notes                        |
+| 10. Virtually patch an endpoint | Constrain a known flaw that detectors can miss            | Private-field denial and successful public-field export                                  | Exact method/path and allowed-value examples  | Application authorization responsibility in notes          |
 
 The lessons do not prescribe the learners' data structures or expose complete
 solution algorithms. Rules needed to reproduce a grader decision are not hidden
@@ -113,12 +113,12 @@ current reference.
 
 ## ML fidelity
 
-The optional lab supplies actual inference from a frozen character-trigram
-logistic-regression classifier. Its training script reads only `training.csv`;
-model metadata records that file's checksum. The held-out set and report are
-separate. The observed evaluation retains missed attacks and false positives,
-including the sample combined policy's poorer result than ML alone. No general
-accuracy improvement is claimed.
+The main coursework exercises supply actual inference from a frozen
+character-trigram logistic-regression classifier. Its training script reads only
+`training.csv`; model metadata records that file's checksum. The held-out set
+and report are separate. The observed evaluation retains missed attacks and
+false positives, including the sample combined policy's poorer result than ML
+alone. No general accuracy improvement is claimed.
 
 The grader uses scripted detector responses to exercise valid scores, invalid
 values, non-200 statuses, redirect handling, timeouts, route decisions, and
@@ -144,11 +144,12 @@ against the public hosted grader.
 
 Verification covers course schema and stage mappings, language-specific hints,
 parseable policy examples, formatted materials, generated starter consistency,
-cumulative reference acceptance, preceding-stage rejection, actual local lab
-requests, model provenance, and a reproducible held-out report. Exact commands
-and outcomes from this pass are recorded below once complete. Hosted CI and the
-hosted prose checker require a subsequent run against the coordinated course and
-tester changes; no hosted result is implied by local checks.
+cumulative reference acceptance, preceding-stage rejection, actual
+protected-application requests, model provenance, and a reproducible held-out
+report. Exact commands and outcomes from this pass are recorded below once
+complete. Hosted CI and the hosted prose checker require a subsequent run
+against the coordinated course and tester changes; no hosted result is implied
+by local checks.
 
 ## Local verification results
 
@@ -310,3 +311,29 @@ edited in this review.
 - [Cloudflare WAF attack scores](https://developers.cloudflare.com/waf/detections/attack-score/).
 - [HTTP 429](https://www.rfc-editor.org/rfc/rfc6585.html#section-4).
 - [OWASP virtual patching](https://owasp.org/www-community/Virtual_Patching_Best_Practices).
+
+## Integrated application exercises, 2026-11-11
+
+The protected application and detector now belong to the tester. Learner
+starters remain focused on the firewall, following the existing BitTorrent
+pattern of tester-managed supporting services. There is no separate lab or
+manual application setup. The main exercises in Stages 2 through 10 show direct
+application responses, responses through the firewall, diagnostics, and observed
+origin request counts. Stage 10 includes a visible replay with an unblocked
+detection probe and a known hard-signature false positive.
+
+The frozen model and training/evaluation sources are maintained under
+`model_development`. The tester embeds the same weights for the main exercises;
+scripted fixtures continue to check exact score boundaries and failure modes.
+The earlier dated verification records above describe their original passes and
+do not substitute for verification of this integration.
+
+Verification of this integration passed locally: `make test` accepted all 20
+Go/Python stage references, rejected all nine preceding-stage references, and
+passed grader regressions, application fixtures, embedded-model identity and
+held-out score parity, and the five Python model checks. The real tester CLI
+passed health and final-stage submissions for both languages, including the
+visible replay summary. All 22 starter/reference READMEs match the rendered
+shared template, all ten lessons use the managed test flow, embedded JSON
+examples parse, and Git whitespace checks pass. No hosted tester release or
+course rollout was performed.

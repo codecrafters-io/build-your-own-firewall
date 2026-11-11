@@ -41,11 +41,11 @@ or decode percent escapes yet. Read rule IDs and terms from policy.
 
 ### Expected decisions
 
-| Situation             | Client result                                                           | Origin receives request? |
-| --------------------- | ----------------------------------------------------------------------- | ------------------------ |
-| Match in `block` mode | HTTP `403`, JSON error, `X-WAF-Match` set to the rule ID                   | No                       |
-| Match in `log` mode   | Original origin response plus `X-WAF-Match` set to the rule ID            | Yes, unchanged           |
-| No match              | Original origin response, without `X-WAF-Match`                           | Yes, unchanged           |
+| Situation             | Client result                                                  | Origin receives request? |
+| --------------------- | -------------------------------------------------------------- | ------------------------ |
+| Match in `block` mode | HTTP `403`, JSON error, `X-WAF-Match` set to the rule ID       | No                       |
+| Match in `log` mode   | Original origin response plus `X-WAF-Match` set to the rule ID | Yes, unchanged           |
+| No match              | Original origin response, without `X-WAF-Match`                | Yes, unchanged           |
 
 Add `X-WAF-Match` only to the client-facing response. Do not forward it upstream
 to the origin.
@@ -63,31 +63,58 @@ the current request. A later clean request must not inherit an earlier match.
 
 ### Tests
 
-The tester supplies a policy containing the `<script` denylist rule and starts
-your program like this. The service URLs and absolute policy path vary between
-runs:
+The tester starts the protected application and detector, writes the trusted
+policy, and starts your firewall with this interface. Addresses and the absolute
+policy path vary between runs:
 
 ```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-With the example policy, send:
+Run the exercise with:
+
+```bash
+codecrafters test
+```
+
+The preview route deliberately interpolates a submitted comment into an HTML
+document without escaping it. The tester first uses log mode with the
+`xss-script` rule and sends:
 
 ```bash
 curl --include http://127.0.0.1:8080/preview \
   -H 'Content-Type: text/plain' --data-binary '<script>alert(1)</script>'
 ```
 
-Block mode must return HTTP `403`, `X-WAF-Match: xss-script`, and:
+The direct application and the log-mode firewall both return HTTP `200` with
+`Content-Type: text/html; charset=utf-8` and:
+
+```html
+<!doctype html><title>Preview</title>
+<div>
+  Preview:
+  <script>
+    alert(1);
+  </script>
+</div>
+```
+
+Your log-mode response must also carry `X-WAF-Match: xss-script`. The test
+output shows that the application received the request. This is a reflected-XSS
+fixture: a browser can execute the script in this HTML; the tester displays the
+response without executing JavaScript.
+
+The tester restarts your firewall in block mode and repeats the request. Expect
+HTTP `403`, `X-WAF-Match: xss-script`, and only:
 
 ```json
 { "error": { "rule": "xss-script" } }
 ```
 
-The origin must receive nothing. The tester also restarts with `mode: "log"` and
-checks that the same body reaches the origin and its response carries the match
-header. Clean requests must not inherit a match. Other cases check rule order
-and case-sensitive matching.
+The application must receive no request through the firewall. A clean preview
+with body `Hello` must still return `200` with `Preview: Hello` in the HTML.
+Other cases check rule order, case-sensitive matching, and request-local
+headers.
 
 ### Notes
 

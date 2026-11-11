@@ -3,10 +3,14 @@ import hashlib
 import json
 import unittest
 from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'model_development'))
 from evaluate import evaluate
 from model import load_model, score
 
-FOLDER = Path(__file__).resolve().parent
+FOLDER = ROOT / 'model_development'
 
 
 class ModelTests(unittest.TestCase):
@@ -41,6 +45,15 @@ class ModelTests(unittest.TestCase):
         # Assert
         self.assertGreaterEqual(attack, 70)
         self.assertLess(benign, 70)
+
+    # The Stage 6 exercise uses the frozen model's actual normalized inputs.
+    def test_stage_six_probe_score(self):
+        # Arrange
+        inputs = ['/search', "1' and sleep(5)#", '']
+        # Act
+        observed = score(inputs, load_model())
+        # Assert
+        self.assertEqual(observed, 77)
 
     # The committed report is reproducible from the frozen model and held-out set.
     def test_evaluation_report(self):

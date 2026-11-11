@@ -90,28 +90,52 @@ HTTP `403` with:
 
 ### Tests
 
-The tester supplies normalization, heuristics, classifier, and decisions policy
-using the thresholds above. It starts your program like this. The service URLs
-and absolute policy path vary between runs:
+The tester starts the protected application and detector, writes the trusted
+policy, and starts your firewall with this interface. Addresses and the absolute
+policy path vary between runs:
 
 ```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-With the earlier `sql-or` signal weighted at `3` and a detector score of `70`,
-this request must return HTTP `403` and `X-WAF-Match: combined_scores`:
+Run the exercise with:
 
 ```bash
-curl --silent 'http://127.0.0.1:8080/search?q=or+1%3D1'
+codecrafters test
 ```
+
+The application accepts legitimate security articles containing attack examples.
+The tester submits this article using the real classifier:
+
+```bash
+curl --include http://127.0.0.1:8080/articles \
+  -H 'Content-Type: text/plain' \
+  --data-binary 'A security article explaining or 1=1 --'
+```
+
+Its heuristic score is `5` and ML score is `69`. First, the tester omits the
+route override: default `heuristic_high: 5` selects `heuristic_high`, blocking
+the legitimate article. It then restarts with the `/articles` override shown
+above. Your firewall must preserve the article, returning HTTP `200`,
+`X-WAF-Score: 5`, `X-WAF-ML-Score: 69`, and:
 
 ```json
-{ "error": { "rule": "combined_scores" } }
+{ "article": "A security article explaining or 1=1 --", "published": true }
 ```
 
-The same query at `/articles` must reach the origin. Other cases check exact,
-case-sensitive route matching, inclusive cutoffs, the heuristic floor, and
-denylist precedence.
+The tester checks that the application receives the original article bytes. A
+clean product search must still work. This demonstrates a false positive that
+route thresholds can address. A hard denylist match still wins on `/articles`;
+raising score thresholds cannot exempt it.
+
+Additional scripted cases check exact route matching, inclusive cutoffs, the
+heuristic floor, denylist precedence, and detector-outage fallback. With
+heuristic score `3` and scripted ML score `70`, `/search` selects
+`combined_scores` while `/articles` passes under its route thresholds.
+
+The Stage 6 probe scoring `77` has no heuristic evidence. Under these combined
+default thresholds, it is allowed. Raising a cutoff can lose detection coverage;
+check legitimate traffic as well as attack probes when tuning policy.
 
 ### Notes
 

@@ -70,30 +70,47 @@ original whitespace and escapes when forwarded.
 
 ### Tests
 
-The tester supplies normalization, denylist rules, and body inspection with
-`max_body_bytes: 64`, then starts your program like this. The service URLs and
-absolute policy path vary between runs:
+The tester starts the protected application and detector, writes the trusted
+policy, and starts your firewall with this interface. Addresses and the absolute
+policy path vary between runs:
 
 ```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-This request must return HTTP `403` and `X-WAF-Match: xss-script`:
+Run the exercise with:
 
 ```bash
-curl --silent http://127.0.0.1:8080/echo \
-  -H 'Content-Type: application/json; charset=utf-8' \
-  --data-binary '{"nested":[{"value":"\u003cscript>"}]}'
+codecrafters test
 ```
+
+The preview route also accepts JSON and form comments. It parses the comment
+before inserting it into HTML. The exercise uses a `4096`-byte inspection limit
+and the earlier detection policies. The tester sends a JSON-escaped script:
+
+```bash
+curl --include http://127.0.0.1:8080/preview \
+  -H 'Content-Type: application/json' \
+  --data-binary '{"comment":"\u003c\u0073\u0063\u0072\u0069\u0070\u0074\u003e\u0061\u006c\u0065\u0072\u0074\u0028\u0031\u0029\u003c\u002f\u0073\u0063\u0072\u0069\u0070\u0074\u003e"}'
+```
+
+The direct application's HTML contains `<script>alert(1)</script>`. Before body
+parsing, the escaped raw text scores `26` under the supplied model and misses
+the literal denylist. After JSON parsing, your inspection view must expose the
+script to the `xss-script` rule. Return HTTP `403` with that match and no
+forwarded request:
 
 ```json
 { "error": { "rule": "xss-script" } }
 ```
 
-Other cases check form decoding, detector inputs, unchanged clean JSON, invalid
-bodies, empty-body detector inputs, unsupported encodings, and byte limits. With
-a four-byte limit, the UTF-8 body `éé` is eligible, while `ééa` must return HTTP
-`413`.
+A JSON body `{"comment":"Hello"}` must still return `200` with `Preview: Hello`
+in the application's HTML. Its original JSON bytes must reach the application.
+
+Other cases use smaller policy limits to check inclusive byte boundaries, form
+decoding, exact detector inputs, unchanged clean JSON, invalid bodies, empty
+bodies, and unsupported encodings. With a four-byte limit, the UTF-8 body `éé`
+is eligible, while `ééa` must return HTTP `413`.
 
 ### Notes
 

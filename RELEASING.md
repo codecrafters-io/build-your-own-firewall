@@ -6,8 +6,13 @@ Keeping the same stage IDs does not make the retired tester compatible. A local
 pass does not update the hosted tester.
 
 The current ten-stage course removes rate limiting (`ou9`). Publish a matching
-tester before updating the hosted course. Response inspection (`as4`) and virtual
-patching (`mu9`) keep their slugs and now occupy Stages 9 and 10.
+tester before updating the hosted course. Response inspection (`as4`) and
+virtual patching (`mu9`) keep their slugs and now occupy Stages 9 and 10.
+
+The integrated application exercises also require the matching tester. It owns
+the protected application, embeds the frozen model from `model_development`, and
+prints direct/application-versus-firewall responses and the final replay.
+Learner starters contain only the firewall project; there is no separate lab.
 
 Course CI pins an SDK revision that downloads release archives through GitHub's
 asset API. The public release-download route returned repeated `504` responses

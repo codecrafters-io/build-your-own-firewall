@@ -9,7 +9,7 @@ rule looking for `<script` will miss `%3Cscript` in a query string that the web
 framework percent-decodes, or full-width `＜ＳＣＲＩＰＴ` if a downstream
 component applies compatibility normalization and case folding.
 
-With normalization enabled, your firewall builds a separate *inspection view*:
+With normalization enabled, your firewall builds a separate _inspection view_:
 it decodes one layer of percent encoding in paths and query components, then
 applies Unicode NFKC normalization followed by case folding to each inspection
 input. These transformations affect inspection copies only. This course defines
@@ -32,27 +32,27 @@ Add these optional policy fields:
 When `normalization` is true, replace the raw-target inspection from earlier
 stages with these separate strings:
 
-| Source  | Inspection input                                                                      |
-| ------- | ------------------------------------------------------------------------------------- |
-| Path    | Percent-decoded once, keeping `+` as `+`                                              |
-| Query   | Each parameter's value, percent-decoded once, with `+` becoming a space               |
-| Headers | Each UTF-8 header occurrence named by `inspect_headers`, without percent decoding     |
-| Body    | The original UTF-8 text, with structured parsing introduced in later stages           |
+| Source  | Inspection input                                                                  |
+| ------- | --------------------------------------------------------------------------------- |
+| Path    | Percent-decoded once, keeping `+` as `+`                                          |
+| Query   | Each parameter's value, percent-decoded once, with `+` becoming a space           |
+| Headers | Each UTF-8 header occurrence named by `inspect_headers`, without percent decoding |
+| Body    | The original UTF-8 text, with structured parsing introduced in later stages       |
 
-With normalization enabled, query parameters are separated by `&`, and the
-first `=` separates a name from its value. A parameter without `=` has an empty
-value. Its name is validated but not inspected. Preserve repeated values as
-independent inputs.
+With normalization enabled, query parameters are separated by `&`, and the first
+`=` separates a name from its value. A parameter without `=` has an empty value.
+Its name is validated but not inspected. Preserve repeated values as independent
+inputs.
 
 Validate percent escapes and decoded UTF-8 in the path even when normalization
-is disabled. When normalization is enabled, also validate query names and values,
-but do not inspect query names. An invalid path or query escape or invalid
-decoded UTF-8 returns HTTP `400`, JSON `error.rule: "invalid_request"`, before
-the origin is contacted. The Notes section covers malformed paths rejected by
-the HTTP server itself.
+is disabled. When normalization is enabled, also validate query names and
+values, but do not inspect query names. An invalid path or query escape or
+invalid decoded UTF-8 returns HTTP `400`, JSON `error.rule: "invalid_request"`,
+before the origin is contacted. The Notes section covers malformed paths
+rejected by the HTTP server itself.
 
-Inspect each occurrence of a configured header as a separate input. Do not
-split a header value on commas.
+Inspect each occurrence of a configured header as a separate input. Do not split
+a header value on commas.
 
 For every inspection input, apply **Unicode NFKC normalization, then case
 folding**. NFKC combines compatibility forms such as full-width letters. Case
@@ -86,27 +86,54 @@ original bytes.
 
 ### Tests
 
-The tester enables normalization and supplies denylist rules and header names
-through policy. It starts your program like this. The service URLs and absolute
+The tester starts the protected application and detector, writes the trusted
+policy, and starts your firewall with this interface. Addresses and the absolute
 policy path vary between runs:
 
 ```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-With the example policy, this request must return HTTP `403` and
-`X-WAF-Match: xss-script`:
+Run the exercise with:
 
 ```bash
-curl --silent 'http://127.0.0.1:8080/search?q=%3Cscript%3E'
+codecrafters test
 ```
+
+The search route decodes query values once and treats `+` as a space. It
+simulates a leaked private row when the decoded query contains `union select`.
+No SQL database or query is executed.
+
+With normalization and the canonical `union select` denylist term enabled, the
+tester sends:
+
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=union+select+password+from+users'
+```
+
+The output first shows the direct application's HTTP `200` response:
 
 ```json
-{ "error": { "rule": "xss-script" } }
+{
+  "results": [
+    { "item": "tea cup" },
+    { "password_hash": "DUMMY_PRIVATE_HASH", "user": "admin" }
+  ]
+}
 ```
 
-The tester also checks one-layer decoding, Unicode case folding, independent
-inputs, ignored query names, invalid encodings, and unchanged log-mode traffic.
+The previous stage's raw-target rule misses `union+select`. Your normalized
+inspection view must find `union select`, return HTTP `403` with
+`X-WAF-Match: sql-union`, and prevent forwarding:
+
+```json
+{ "error": { "rule": "sql-union" } }
+```
+
+The tester then requests `q=tea+cup`. It must still return HTTP `200` with
+`{"results":[{"item":"tea cup"}]}`. Other cases check one-layer decoding,
+Unicode normalization and case folding, independent inputs, ignored query names,
+invalid encodings, and unchanged log-mode traffic.
 
 ### Notes
 

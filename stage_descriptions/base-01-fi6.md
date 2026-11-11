@@ -28,9 +28,9 @@ The starter accepts three flags. Keep this interface throughout the challenge:
 | `--detector` | A separate ML detector's base URL                                      |
 | `--policy`   | An absolute path to a trusted JSON policy file                         |
 
-The application is also called the **origin**: it is the server your firewall will
-forward requests to. The detector is a separate service that scores inspection
-inputs in later stages.
+The application is also called the **origin**: it is the server your firewall
+will forward requests to. The detector is a separate service that scores
+inspection inputs in later stages.
 
 ### Tests
 
@@ -41,7 +41,13 @@ program like this. The service URLs and absolute policy path vary between runs:
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-From another terminal, run this command twice:
+Run the exercise with:
+
+```bash
+codecrafters test
+```
+
+The tester sends the equivalent of this request twice:
 
 ```bash
 curl --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:8080/health

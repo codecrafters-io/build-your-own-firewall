@@ -65,52 +65,67 @@ availability while losing this detector's protection.
 Include these diagnostics on client-facing responses, including forwarded
 responses and `403` blocks. Do not forward them upstream to the origin.
 
-| Detector outcome       | Required client-facing response headers                   |
+| Detector outcome       | Required client-facing response headers                  |
 | ---------------------- | -------------------------------------------------------- |
-| Valid score `92`       | `X-WAF-Detector-Status: ok`, `X-WAF-ML-Score: 92`          |
-| Unavailable or invalid | `X-WAF-Detector-Status: unavailable`, no ML score header   |
-| No classifier policy   | No detector call or detector headers required             |
+| Valid score `92`       | `X-WAF-Detector-Status: ok`, `X-WAF-ML-Score: 92`        |
+| Unavailable or invalid | `X-WAF-Detector-Status: unavailable`, no ML score header |
+| No classifier policy   | No detector call or detector headers required            |
 
 Keep heuristic diagnostics. For forwarded traffic, preserve request and response
 body bytes and follow the earlier proxy header rules.
 
 ### Tests
 
-The tester supplies normalization and classifier policy with threshold `70`,
-then starts your program like this. The service URLs and absolute policy path
-vary between runs:
+The tester starts the protected application and detector, writes the trusted
+policy, and starts your firewall with this interface. Addresses and the absolute
+policy path vary between runs:
 
 ```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-For this request, the detector returns `{"score":70}`:
+Run the exercise with:
 
 ```bash
-curl --silent 'http://127.0.0.1:8080/search?q=example'
+codecrafters test
 ```
 
-Your firewall must return HTTP `403`, `X-WAF-Detector-Status: ok`,
-`X-WAF-ML-Score: 70`, and:
+The coursework detector runs a supplied frozen classifier. With normalization,
+the earlier rules, and classifier cutoff `70`, the tester sends:
+
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=1%27+AND+SLEEP(5)%23'
+```
+
+The normalized inputs are `["/search", "1' and sleep(5)#", ""]`. The shipped
+model scores them `77`, while the denylist and heuristic signals do not match.
+Expect HTTP `403`, `X-WAF-Score: 0`, `X-WAF-Detector-Status: ok`,
+`X-WAF-ML-Score: 77`, and:
 
 ```json
 { "error": { "rule": "ml_score" } }
 ```
 
-The origin must receive nothing. Other cases check zero scores, detector calls
-on denylist matches, and fallback for invalid responses, redirects, errors, and
-timeouts, including trickled headers and body bytes, and incomplete replies. If
-the detector returns `503`, an otherwise unmatched request must reach the
-origin.
+The application must receive no forwarded probe. A clean `q=tea+cup` search
+still returns HTTP `200` with product results. The application executes no SQL
+or sleep operation for this probe: this exercise demonstrates additional
+inference-based detection, not a successful exploit.
+
+The tester also substitutes scripted detector responses to check exact cutoffs,
+zero scores, and fallback independently of model quality. For example, score
+`70` with cutoff `70` must block with `ml_score`. Other cases cover calls on
+denylist matches, invalid responses, redirects, errors, and the complete 200 ms
+deadline, including trickled headers/body bytes and incomplete replies. If the
+detector returns `503`, an otherwise unmatched request must reach the origin.
 
 ### Notes
 
-- The supplied lab in `examples/waf-lab` includes a small pretrained classifier,
-  its training source, and a separate held-out evaluation. You integrate
-  inference. Training is not required to pass this stage.
-- Grader scores are scripted to test your integration and policy behavior. They
-  do not measure the supplied model's detection accuracy. The detector is a
-  trusted service that receives inspection content.
+- The coursework detector includes a small pretrained classifier. Its training
+  source and held-out evaluation live in the course source repository under
+  `model_development`. You integrate inference; training is not required.
+- Scripted detector scores test your integration and policy behavior. They do
+  not measure the supplied model's detection accuracy. The detector is a trusted
+  service that receives inspection content.
 - Modern WAFs combine ML scores and rules. See
   [Cloudflare's attack-score documentation](https://developers.cloudflare.com/waf/detections/attack-score/).
   Its score convention differs: lower scores indicate greater risk.

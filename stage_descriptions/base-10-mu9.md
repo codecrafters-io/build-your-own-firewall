@@ -3,12 +3,12 @@ fields clients may request.
 
 ### Why patch an endpoint?
 
-The lab application's export endpoint trusts a client-provided list of record
-fields and will also return a private field such as `password_hash`. That
+The protected application's export endpoint trusts a client-provided list of
+record fields and will also return a private field such as `password_hash`. That
 request can look harmless to both detectors. A **virtual patch** enforces a rule
-for a known application flaw at the firewall while the application awaits a
-code fix. Your patch must stop the private-field export and keep public-field
-exports working.
+for a known application flaw at the firewall while the application awaits a code
+fix. Your patch must stop the private-field export and keep public-field exports
+working.
 
 ### Patch policy
 
@@ -61,10 +61,10 @@ pass its patches **before forwarding**. On patch failure, return HTTP `403`,
 ```
 
 - **Enforcement:** A request that fails a patch must not reach the origin.
-  Preserve earlier diagnostics. Patch enforcement remains active in log mode
-  and with the detector unavailable.
-- **Parsing and precedence:** Patch validation parses the original body bytes
-  as JSON and adds no `Content-Type` restriction of its own. It must work when
+  Preserve earlier diagnostics. Patch enforcement remains active in log mode and
+  with the detector unavailable.
+- **Parsing and precedence:** Patch validation parses the original body bytes as
+  JSON and adds no `Content-Type` restriction of its own. It must work when
   `inspection` is absent. When body inspection is configured, its validation
   runs first and retains its existing failure statuses.
 - **Forwarding:** Allowed requests retain original body bytes and headers. Do
@@ -73,53 +73,78 @@ pass its patches **before forwarding**. On patch failure, return HTTP `403`,
 
 ### Tests
 
-The tester supplies the patch above alongside earlier policies and starts your
-program like this. The service URLs and absolute policy path vary between runs:
+The tester starts the protected application and detector, writes the trusted
+policy, and starts your firewall with this interface. Addresses and the absolute
+policy path vary between runs:
 
 ```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-With a scripted ML score of `12` and no heuristic match, this request must
-return HTTP `403` and `X-WAF-Match: export-fields`:
+Run the exercise with:
 
 ```bash
-curl --silent http://127.0.0.1:8080/api/export \
+codecrafters test
+```
+
+The tester exercises the same application's export flaw with all earlier
+controls enabled. It first shows the direct private-field export, then sends:
+
+```bash
+curl --include http://127.0.0.1:8080/api/export \
   -H 'Content-Type: application/json' \
   --data-binary '{"fields":["name","password_hash"]}'
 ```
+
+The direct application returns `Mira` and `DUMMY_PRIVATE_HASH`. The real model's
+score is below the combined cutoffs, and there is no heuristic match. Your patch
+must stop the request before forwarding: expect HTTP `403`,
+`X-WAF-Match: export-fields`, and:
 
 ```json
 { "error": { "rule": "export-fields" } }
 ```
 
-The tester then sends this public-field request, which must reach the origin
-unchanged and return HTTP `200`:
+This public-field export must still reach the application unchanged:
 
 ```bash
-curl --silent http://127.0.0.1:8080/api/export \
+curl --include http://127.0.0.1:8080/api/export \
   -H 'Content-Type: application/json' \
-  --data-binary '{ "fields": ["customer_id", "name"] }'
+  --data-binary '{"fields":["customer_id","name"]}'
 ```
+
+Expect HTTP `200` and:
 
 ```json
-{ "ok": true }
+{ "customer_id": "Customer-4829", "name": "Mira" }
 ```
 
-Other cases check encoded paths, policy-defined routes and arguments, invalid
-field arrays, duplicate keys, log mode, and detector outage.
+The same test run replays the earlier controls against the application and
+prints requests, direct application responses, firewall responses, diagnostic
+scores, and origin request counts. Under the supplied policy, its summary is:
 
-The final replay also exercises the earlier controls against attack and
-legitimate requests. Success includes both rejecting the specified attacks and
-preserving permitted traffic.
+```text
+Replay totals: blocked requests=5, withheld responses=1, unblocked probes=1, preserved legitimate=4, false positives=1
+```
+
+The unblocked ML-only probe scoring `77` executes no SQL. The false positive is
+a legitimate article containing the hard signature `union select`; route score
+tuning cannot override that rule. The other article, clean preview, product
+search, and public export remain allowed. Passing verifies the specified policy,
+including its visible limitations; it does not mean every example becomes green.
+
+Additional cases check encoded paths, policy-defined routes and arguments,
+invalid field arrays, duplicate keys, log mode, and detector outage, followed by
+the earlier protocol and failure-path checks.
 
 ### Notes
 
 - This patch restricts one known request shape. It does not authenticate users,
   establish ownership of records, or replace application authorization and
   validation.
-- Fixture requests, secrets, and model scores are synthetic. Replay outcomes are
-  not production detection-accuracy measurements.
+- Application data and attack fixtures are synthetic. The main replay uses the
+  frozen classifier; additional boundary and failure cases use scripted scores.
+  Replay outcomes are not production detection-accuracy measurements.
 - Read
   [OWASP's virtual-patching guidance](https://owasp.org/www-community/Virtual_Patching_Best_Practices)
   for the operational tradeoffs of patching at an enforcement layer.

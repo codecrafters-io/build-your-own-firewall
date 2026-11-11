@@ -82,23 +82,39 @@ and the response reports `X-WAF-Match: heuristic_score`.
 
 ### Tests
 
-The tester enables normalization and supplies the heuristic policy above. It
-starts your program like this. The service URLs and absolute policy path vary
-between runs:
+The tester starts the protected application and detector, writes the trusted
+policy, and starts your firewall with this interface. Addresses and the absolute
+policy path vary between runs:
 
 ```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-This request must return HTTP `403` and `X-WAF-Score: 5`:
+Run the exercise with:
 
 ```bash
-curl --silent 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
+codecrafters test
 ```
+
+With normalization and the heuristic policy above, the tester sends:
+
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
+```
+
+The application simulates a leaked private row when the decoded query combines
+`or 1=1` and `--`. Its direct response contains `DUMMY_PRIVATE_HASH`; the tester
+prints that baseline before making the same request through your firewall.
+
+Your firewall must return HTTP `403`, `X-WAF-Score: 5`, both signal IDs, and:
 
 ```json
 { "error": { "rule": "heuristic_score" } }
 ```
+
+The application must receive no forwarded attack. A clean `q=tea+cup` search
+still returns `200` with product results. These are simulated SQL-injection
+consequences, not executed SQL.
 
 Other cases check repeated signals, clean-request diagnostics, and denylist
 precedence while retaining the full heuristic score and all fired signal IDs.
