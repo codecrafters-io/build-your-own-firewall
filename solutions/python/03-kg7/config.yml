@@ -1,7 +1,1 @@
-hints:
-  - title_markdown: How can I inspect without rewriting the body?
-    body_markdown:
-      Read the Content-Length bytes once and keep that byte string for
-      forwarding. Decode an inspection copy and use a substring search for each
-      rule. Decide before opening the origin connection. Build a fresh
-      diagnostics dict for each request.
+hints: []

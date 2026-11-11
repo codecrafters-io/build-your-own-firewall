@@ -1,6 +1,1 @@
-hints:
-  - title_markdown: How do I keep the server available?
-    body_markdown:
-      Define do_GET on a BaseHTTPRequestHandler subclass, send the status, then
-      call end_headers. Create a ThreadingHTTPServer and call serve_forever
-      once. Returning from the handler must not end the server process.
+hints: []

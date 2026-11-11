@@ -1,7 +1,1 @@
-hints:
-  - title_markdown: How can I inspect without rewriting the body?
-    body_markdown:
-      Read request bytes once, inspect a copy, and supply the original bytes to
-      the upstream request. Load the policy at startup. Look for literal
-      substrings with strings.Contains before starting the origin request. Keep
-      diagnostics local to the handler.
+hints: []
