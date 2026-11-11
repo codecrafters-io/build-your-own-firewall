@@ -39,8 +39,9 @@ received the request. Learners implement only the firewall.
 
 Every stage begins with a single implementation goal and a short motivation. The
 lesson defines the externally visible behavior and any domain concept needed to
-interpret it. Go and Python implementation hints are available for the first
-three stages. Caveats, scope limits, and external references live in notes.
+interpret it. Go and Python implementation hints are available only for stages
+1-3. Stages 4-10 have no implementation hints. Caveats, scope limits, and
+external references live in notes.
 
 ## The final challenge
 

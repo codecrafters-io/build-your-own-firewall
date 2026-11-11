@@ -118,6 +118,6 @@ is eligible, while `ééa` must return HTTP `413`.
   bodies, chunked request bodies, and alternate JSON encodings are outside the
   required subset. Unsupported nonempty bodies must not be treated as inspected.
 - Rejecting duplicate keys prevents different parsers from choosing different
-  values. Language-library parsing techniques belong in the hints.
+  values.
 - See the [JSON specification](https://www.rfc-editor.org/rfc/rfc8259.html) and
   [form-encoding definition](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).
