@@ -5,12 +5,12 @@ the protected application.
 
 A firewall must carry legitimate traffic correctly before enforcing security
 policy. A **reverse proxy** accepts a client's request, makes a separate request
-to the application, and returns the application's response. Your WAF will
+to the application, and returns the application's response. Your firewall will
 inspect these two directions in later stages.
 
 ```text
-Client -- GET /products?q=book --> WAF --> Origin
-Client <-- 200 + response body -- WAF <-- Origin
+Client -- GET /products?q=book --> Firewall --> Origin
+Client <-- 200 + response body -- Firewall <-- Origin
 ```
 
 ### Expected behavior
@@ -25,26 +25,33 @@ the supplied origin URL.
 | Response  | Status, body bytes, and end-to-end headers, including `Content-Type` and `X-Request-Id`               | Framing headers must describe the body you actually send. |
 
 Preserve JSON whitespace and escaping, empty bodies, and unknown fields. Relay
-origin HTTP errors and redirects as responses. Do not follow a redirect. If the
-origin connection fails or its response cannot be read, return HTTP `502` with
-`Content-Type: application/json`, `X-WAF-Match: origin_unavailable`, and an
-`error.rule` of `origin_unavailable`.
+origin HTTP errors and redirects as responses. Do not follow a redirect.
 
-Headers beginning with `X-WAF-` are reserved for your own diagnostics. Remove
-them from forwarded requests and origin responses so neither side can forge your
-decisions.
+Read the complete origin response body before sending its status, headers, or
+body to the client. If the origin connection fails or its response cannot be
+read completely, return HTTP `502` with `Content-Type: application/json`,
+`X-WAF-Match: origin_unavailable`, and this JSON body:
 
-### Connection headers
+```json
+{ "error": { "rule": "origin_unavailable" } }
+```
+
+### Header handling
 
 HTTP has headers that describe one connection rather than the complete
-client-to-application exchange. Do not copy `Connection`, `Keep-Alive`,
-`Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailer`,
-`Transfer-Encoding`, `Upgrade`, or `Content-Length`. Also remove any header
-named in `Connection`. Your HTTP library can supply valid framing for the new
-connection.
+client-to-application exchange. Apply these rules to both forwarded requests
+and origin responses. Match header names, names listed in `Connection`, and the
+`X-WAF-` prefix case-insensitively:
 
-Remove both these connection headers and the reserved `X-WAF-` headers described
-above. Preserve all remaining application headers.
+- Remove `Connection`, `Keep-Alive`, `Proxy-Authenticate`,
+  `Proxy-Authorization`, `TE`, `Trailer`, `Transfer-Encoding`, and `Upgrade`.
+  Also remove any header named in the comma-separated `Connection` value.
+- Remove the incoming `Content-Length` rather than copying it. Your HTTP
+  library can supply valid framing for the body sent on the new connection.
+- Remove headers beginning with `X-WAF-`. They are reserved for your own
+  diagnostics, so neither the client nor the origin can forge your decisions.
+
+Preserve all remaining application headers.
 
 ### Tests
 
@@ -65,7 +72,7 @@ curl --silent --request PATCH 'http://127.0.0.1:8080/echo?source=course' \
 ```
 
 The origin returns HTTP `200`, `X-Request-Id: origin-7`, and this exact body,
-which your WAF must relay:
+which your firewall must relay:
 
 ```json
 { "ok": true }
@@ -73,19 +80,16 @@ which your WAF must relay:
 
 The tester also checks all five supported methods, unchanged request bytes and
 headers, error and redirect responses, and removal of connection and reserved
-headers. An incomplete origin response must produce `502` before any origin
-bytes or headers are released. An origin `400` must remain `400`. With the
-origin stopped, a request to `/products` must return HTTP `502` and:
-
-```json
-{ "error": { "rule": "origin_unavailable" } }
-```
+headers. It checks that incomplete origin responses produce the `502` response
+defined above before any origin bytes or headers are released. An origin `400`
+must remain `400`. With the origin stopped, a request to `/products` must also
+return the `502` response defined above.
 
 ### Notes
 
 - The tester starts its own origin. For manual checks, start the lab application
   described in `examples/waf-lab/README.md`. Your launch command starts only the
-  WAF.
+  firewall.
 - This challenge uses complete, non-streaming HTTP messages. HEAD, upgrades,
   compressed messages, and chunked request bodies are outside the required
   subset. Requests with bodies have a valid `Content-Length`.
