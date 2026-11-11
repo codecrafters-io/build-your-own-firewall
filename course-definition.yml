@@ -16,20 +16,23 @@ marketing:
   sample_extension_idea_description: Extend response inspection to streams without releasing protected content.
   frequently_asked_questions:
   - question_markdown: What exactly will I build?
-    answer_markdown: 'You''ll build an inbound web application firewall: external client -> your WAF -> protected application server. Your program inspects HTTP requests before the application receives them and checks responses before returning them to the client.
+    answer_markdown: 'You''ll build a reverse proxy that sits between clients and a protected application:
 
 
-      Across eleven stages, you''ll teach your proxy to recognize suspicious requests, handle attempts to disguise them, combine rule-based and machine-learning scores, and enforce traffic limits. You''ll also prevent sensitive response data from reaching clients. Finally, you''ll protect a vulnerable export endpoint by blocking requests for private fields while keeping legitimate exports working. Each stage builds on the behavior you''ve already implemented.'
+      `client -> your firewall -> application server`
+
+
+      Your firewall inspects requests before forwarding them and checks responses before returning them to clients. It can block a request before the application processes it or withhold a response containing protected data.
+
+
+      Across eleven stages, you''ll extend the same program, keeping earlier behavior working as you add each capability.'
   - question_markdown: Where does machine learning fit?
-    answer_markdown: 'A separate trusted detector scores HTTP inspection inputs. Your WAF calls it with a deadline, validates the result, combines its score with policy, and reports when detection is unavailable. A supplied small pretrained classifier lets you exercise real inference locally without an API key or model-training prerequisites.
-
-
-      The grader uses scripted detector replies to test protocol and policy boundaries reproducibly. The model''s separate held-out evaluation reports its actual errors on a small synthetic dataset. Neither result measures production WAF accuracy.'
+    answer_markdown: 'A separate trusted detector scores HTTP inspection inputs. Your WAF calls it with a deadline, validates the result, combines its score with policy, and reports when detection is unavailable. A supplied small pretrained classifier lets you exercise real inference locally without an API key or model-training prerequisites.'
   - question_markdown: What is the final challenge?
-    answer_markdown: 'A lab export endpoint accepts a list of requested record fields. Its vulnerable implementation also accepts a private field. The request can look harmless to both detectors. You''ll apply a virtual patch that restricts permitted export fields before the request reaches the server. Public-field exports must still succeed.
+    answer_markdown: 'An export endpoint accepts a list of record fields to return, but its vulnerable implementation also allows clients to request a private field. These requests can look harmless to generic rules and ML detection. You''ll add an endpoint-specific virtual patch that blocks private-field requests before they reach the application, while keeping legitimate public-field exports working.
 
 
-      The finale combines this patch with earlier request and response controls. The origin request counter proves that blocked input never reaches the application; response denials happen after the application has processed the request.'
+      The final stage combines this patch with your earlier controls: request inspection blocks disallowed input before the application processes it, while response inspection withholds responses containing protected data.'
   - question_markdown: What do I need?
     answer_markdown: 'Use Go or Python, with familiarity with HTTP, JSON, and Git. The tester supplies a local application, detector replies, policies, and dummy data. The optional lab application and ML detector use Python''s standard library. No paid service is needed.
 
