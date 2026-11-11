@@ -25,19 +25,25 @@ Read the file supplied by `--policy` at startup:
 For now, inspect two strings independently: the raw request target (path plus
 query) and the request body interpreted as UTF-8 text. A match is a literal,
 case-sensitive substring within either string. Do not combine their boundaries
-or decode percent escapes yet. Read rule IDs and terms from policy. The first
-matching entry wins.
+or decode percent escapes yet. Read rule IDs and terms from policy.
 
-When `mode` is absent, use `block`. An empty policy adds no rules. With no
-match, forward the original request and response unchanged.
+- **Matching order:** Evaluate `denylist` rules in policy order. The first rule
+  whose `term` appears in either inspection string wins, regardless of which
+  string contains the match.
+- **Defaults:** If `mode` is omitted, use `block`. If `denylist` is empty or
+  omitted, this stage adds no rule matches. Stage 2's proxy behavior still
+  applies.
 
 ### Expected decisions
 
-| Situation             | Client result                                            | Origin receives request? |
-| --------------------- | -------------------------------------------------------- | ------------------------ |
-| Match in `block` mode | HTTP `403`, JSON error, `X-WAF-Match` set to the rule ID | No                       |
-| Match in `log` mode   | Original origin response plus `X-WAF-Match`              | Yes, unchanged           |
-| No match              | Original origin response, without `X-WAF-Match`          | Yes, unchanged           |
+| Situation             | Client result                                                           | Origin receives request? |
+| --------------------- | ----------------------------------------------------------------------- | ------------------------ |
+| Match in `block` mode | HTTP `403`, JSON error, `X-WAF-Match` set to the rule ID                   | No                       |
+| Match in `log` mode   | Original origin response plus `X-WAF-Match` set to the rule ID            | Yes, unchanged           |
+| No match              | Original origin response, without `X-WAF-Match`                           | Yes, unchanged           |
+
+Add `X-WAF-Match` only to the client-facing response. Do not forward it upstream
+to the origin.
 
 For a block, send `Content-Type: application/json` and this shape:
 
@@ -45,10 +51,10 @@ For a block, send `Content-Type: application/json` and this shape:
 { "error": { "rule": "xss-script" } }
 ```
 
-Every error your WAF generates, including `origin_unavailable` and the errors
-added in later stages, uses this shape and an `X-WAF-Match` header naming its
-rule. The error must not echo request content. Match headers describe only the
-current request. A later clean request must not inherit an earlier match.
+Every error your firewall generates, including `origin_unavailable` and the
+errors added in later stages, uses this shape and an `X-WAF-Match` header naming
+its rule. The error must not echo request content. Match headers describe only
+the current request. A later clean request must not inherit an earlier match.
 
 ### Tests
 
