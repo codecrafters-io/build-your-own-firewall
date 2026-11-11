@@ -71,7 +71,8 @@ responses and `403` blocks. Do not forward them upstream to the origin.
 | Unavailable or invalid | `X-WAF-Detector-Status: unavailable`, no ML score header   |
 | No classifier policy   | No detector call or detector headers required             |
 
-Keep heuristic diagnostics. Forwarded traffic remains byte-for-byte unchanged.
+Keep heuristic diagnostics. For forwarded traffic, preserve request and response
+body bytes and follow the earlier proxy header rules.
 
 ### Tests
 

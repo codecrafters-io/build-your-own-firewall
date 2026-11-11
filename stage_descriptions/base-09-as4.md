@@ -39,9 +39,9 @@ Size takes precedence over pattern inspection. Search the body decoded as UTF-8,
 replacing invalid byte sequences for inspection only. When the body is valid
 JSON, also search each decoded string, including object keys, at every nesting
 depth and across duplicate-key values. Nonstandard constants such as `NaN` and
-`Infinity` make the body invalid JSON; search only the raw-text inspection copy
-in that case. Malformed or non-JSON bodies also use raw-text inspection rather
-than a JSON-validation denial. Do not join separate strings or normalize,
+`Infinity` make the body invalid JSON. In that case, search only the raw-text
+inspection copy. Malformed or non-JSON bodies also use raw-text inspection
+rather than a JSON-validation denial. Do not join separate strings or normalize,
 percent-decode, or base64-decode response content. An allowed response retains
 its original body bytes, including any invalid UTF-8.
 

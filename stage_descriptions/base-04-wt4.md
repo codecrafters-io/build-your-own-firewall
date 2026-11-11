@@ -9,12 +9,12 @@ rule looking for `<script` will miss `%3Cscript` in a query string that the web
 framework percent-decodes, or full-width `＜ＳＣＲＩＰＴ` if a downstream
 component applies compatibility normalization and case folding.
 
-Your firewall builds a separate *inspection view*: it decodes one layer of
-percent encoding in paths and query components, then applies Unicode NFKC
-normalization followed by case folding to each inspection input. Forwarded
-traffic keeps its original bytes. This course defines a fixed inspection
-pipeline; in production, those transformations must account for how the
-protected application actually interprets inputs.
+With normalization enabled, your firewall builds a separate *inspection view*:
+it decodes one layer of percent encoding in paths and query components, then
+applies Unicode NFKC normalization followed by case folding to each inspection
+input. These transformations affect inspection copies only. This course defines
+a fixed inspection pipeline. In production, those transformations must account
+for how the protected application actually interprets inputs.
 
 ### The inspection view
 
@@ -39,9 +39,10 @@ stages with these separate strings:
 | Headers | Each UTF-8 header occurrence named by `inspect_headers`, without percent decoding     |
 | Body    | The original UTF-8 text, with structured parsing introduced in later stages           |
 
-Query parameters are separated by `&`, and the first `=` separates a name from
-its value. A parameter without `=` has an empty value; its name is validated but
-not inspected. Preserve repeated values as independent inputs.
+With normalization enabled, query parameters are separated by `&`, and the
+first `=` separates a name from its value. A parameter without `=` has an empty
+value. Its name is validated but not inspected. Preserve repeated values as
+independent inputs.
 
 Validate percent escapes and decoded UTF-8 in the path even when normalization
 is disabled. When normalization is enabled, also validate query names and values,

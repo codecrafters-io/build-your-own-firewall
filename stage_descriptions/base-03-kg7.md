@@ -36,8 +36,8 @@ or decode percent escapes yet. Read rule IDs and terms from policy.
   whose `term` appears in either inspection string wins, regardless of which
   string contains the match.
 - **Defaults:** If `mode` is omitted, use `block`. If `denylist` is empty or
-  omitted, this stage adds no rule matches. Stage 2's proxy behavior still
-  applies.
+  omitted, this stage adds no rule matches. Keep the proxy behavior from earlier
+  stages.
 
 ### Expected decisions
 
