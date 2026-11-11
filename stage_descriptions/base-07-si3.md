@@ -125,17 +125,17 @@ above. Your firewall must preserve the article, returning HTTP `200`,
 
 The tester checks that the application receives the original article bytes. A
 clean product search must still work. This demonstrates a false positive that
-route thresholds can address. A hard denylist match still wins on `/articles`;
-raising score thresholds cannot exempt it.
+route thresholds can address. A hard denylist match still wins on `/articles`.
+Raising score thresholds cannot exempt it.
 
 Additional scripted cases check exact route matching, inclusive cutoffs, the
 heuristic floor, denylist precedence, and detector-outage fallback. With
 heuristic score `3` and scripted ML score `70`, `/search` selects
 `combined_scores` while `/articles` passes under its route thresholds.
 
-The Stage 6 probe scoring `77` has no heuristic evidence. Under these combined
-default thresholds, it is allowed. Raising a cutoff can lose detection coverage;
-check legitimate traffic as well as attack probes when tuning policy.
+The earlier ML-only probe scoring `77` has no heuristic evidence. Under these
+combined default thresholds, it is allowed. Raising a cutoff can lose detection
+coverage. Check legitimate traffic as well as attack probes when tuning policy.
 
 ### Notes
 

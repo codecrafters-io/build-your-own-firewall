@@ -101,7 +101,7 @@ The direct application and the log-mode firewall both return HTTP `200` with
 
 Your log-mode response must also carry `X-WAF-Match: xss-script`. The test
 output shows that the application received the request. This is a reflected-XSS
-fixture: a browser can execute the script in this HTML; the tester displays the
+fixture: a browser can execute the script in this HTML. The tester displays the
 response without executing JavaScript.
 
 The tester restarts your firewall in block mode and repeats the request. Expect

@@ -128,10 +128,10 @@ Replay totals: blocked requests=5, withheld responses=1, unblocked probes=1, pre
 ```
 
 The unblocked ML-only probe scoring `77` executes no SQL. The false positive is
-a legitimate article containing the hard signature `union select`; route score
+a legitimate article containing the hard signature `union select`. Route score
 tuning cannot override that rule. The other article, clean preview, product
 search, and public export remain allowed. Passing verifies the specified policy,
-including its visible limitations; it does not mean every example becomes green.
+including its visible limitations. It does not mean every example becomes green.
 
 Additional cases check encoded paths, policy-defined routes and arguments,
 invalid field arrays, duplicate keys, log mode, and detector outage, followed by
@@ -143,7 +143,7 @@ the earlier protocol and failure-path checks.
   establish ownership of records, or replace application authorization and
   validation.
 - Application data and attack fixtures are synthetic. The main replay uses the
-  frozen classifier; additional boundary and failure cases use scripted scores.
+  frozen classifier. Additional boundary and failure cases use scripted scores.
   Replay outcomes are not production detection-accuracy measurements.
 - Read
   [OWASP's virtual-patching guidance](https://owasp.org/www-community/Virtual_Patching_Best_Practices)

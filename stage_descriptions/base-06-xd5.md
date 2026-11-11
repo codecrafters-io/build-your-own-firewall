@@ -122,7 +122,7 @@ detector returns `503`, an otherwise unmatched request must reach the origin.
 
 - The coursework detector includes a small pretrained classifier. Its training
   source and held-out evaluation live in the course source repository under
-  `model_development`. You integrate inference; training is not required.
+  `model_development`. You integrate inference. Training is not required.
 - Scripted detector scores test your integration and policy behavior. They do
   not measure the supplied model's detection accuracy. The detector is a trusted
   service that receives inspection content.

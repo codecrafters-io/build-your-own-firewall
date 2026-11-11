@@ -122,7 +122,7 @@ The output first shows the direct application's HTTP `200` response:
 }
 ```
 
-The previous stage's raw-target rule misses `union+select`. Your normalized
+The raw-target rule from earlier stages misses `union+select`. Your normalized
 inspection view must find `union select`, return HTTP `403` with
 `X-WAF-Match: sql-union`, and prevent forwarding:
 

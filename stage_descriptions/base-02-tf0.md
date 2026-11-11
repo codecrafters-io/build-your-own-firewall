@@ -58,7 +58,7 @@ Preserve all remaining application headers.
 The application is a small customer service with product search, article
 publishing, HTML previews, and record exports. You will protect this same
 application as the course progresses. Its records and secrets are dummy data.
-The tester manages the services; you only implement the firewall.
+The tester manages the services. You only implement the firewall.
 
 The tester starts the protected application and detector, writes the trusted
 policy, and starts your firewall with this interface. Addresses and the absolute
@@ -110,7 +110,7 @@ without releasing origin content. An origin `400` must remain `400`.
 
 - The tester owns the application and detector. Your launch command starts only
   the firewall. The `curl` commands describe requests made inside the test
-  environment; running them separately requires services at those addresses.
+  environment. Running them separately requires services at those addresses.
 - This challenge uses complete, non-streaming HTTP messages. HEAD, upgrades,
   compressed messages, and chunked request bodies are outside the required
   subset. Requests with bodies have a valid `Content-Length`.

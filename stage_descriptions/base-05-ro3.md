@@ -103,7 +103,7 @@ curl --include 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
 ```
 
 The application simulates a leaked private row when the decoded query combines
-`or 1=1` and `--`. Its direct response contains `DUMMY_PRIVATE_HASH`; the tester
+`or 1=1` and `--`. Its direct response contains `DUMMY_PRIVATE_HASH`. The tester
 prints that baseline before making the same request through your firewall.
 
 Your firewall must return HTTP `403`, `X-WAF-Score: 5`, both signal IDs, and:
