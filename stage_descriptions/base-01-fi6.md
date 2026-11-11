@@ -3,21 +3,21 @@ In this stage, you'll start an HTTP server that answers health checks on port
 
 ### Why start with health checks?
 
-Your WAF will stand between external clients and a protected web application. A
-health check lets the caller ask whether the WAF is running, even when that
-application is unavailable. Start with this small endpoint before adding
-forwarding or inspection.
+Your firewall will stand between external clients and a protected web
+application. A health check lets the caller ask whether the firewall is running,
+even when that application is unavailable. Start with this small endpoint before
+adding forwarding or inspection.
 
 ```text
-External client -> Your WAF -> Application server
-                   /health     (--origin)
+External client -> Your firewall -> Application server
+                   /health          (--origin)
 ```
 
 ### Expected behavior
 
 Listen on port `8080`. Each `GET /health` must return HTTP `200 OK`, without a
 redirect. Keep the process running so it can answer subsequent requests. Health
-checks must not contact the application or detector or depend on policy
+checks must not contact the application or detector, nor depend on policy
 contents.
 
 The starter accepts three flags. Keep this interface throughout the challenge:
@@ -28,7 +28,7 @@ The starter accepts three flags. Keep this interface throughout the challenge:
 | `--detector` | A separate ML detector's base URL                                      |
 | `--policy`   | An absolute path to a trusted JSON policy file                         |
 
-The application is also called the **origin**: it is the server your WAF will
+The application is also called the **origin**: it is the server your firewall will
 forward requests to. The detector is a separate service that scores inspection
 inputs in later stages.
 
@@ -61,7 +61,7 @@ and checks that it can answer repeated requests.
 - A response body is optional. Other methods and paths are introduced in later
   stages.
 - The tester supplies service addresses and a temporary policy path. Read the
-  flags rather than hardcoding the example values. It may start your program
-  from a different working directory.
+  flags rather than hardcoding the example values. The tester may also start
+  your program from a different working directory.
 - All stages use local services and dummy data. No paid API key is needed. Write
   debugging output to standard error.

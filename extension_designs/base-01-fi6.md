@@ -1,4 +1,4 @@
-# Stage 1: Bind to a port
+# Stage 1: Respond to health checks
 
 Scope approved in conversation: implement the first base stage end to end. The
 stage order and slug come from the course design and supplied allocation.

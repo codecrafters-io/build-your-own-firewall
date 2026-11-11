@@ -20,7 +20,7 @@ the WAF permits.
 
 | #   | Stage                                                            | Observable result                                                                           |
 | --- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 1   | [Bind to a port](stage_descriptions/base-01-fi6.md)              | Health checks work without an application or detector.                                      |
+| 1   | [Respond to health checks](stage_descriptions/base-01-fi6.md)    | Health checks work without an application or detector.                                      |
 | 2   | [Proxy web requests](stage_descriptions/base-02-tf0.md)          | Methods, targets, bodies, statuses, and end-to-end headers survive forwarding.              |
 | 3   | [Block and log](stage_descriptions/base-03-kg7.md)               | A matched request stops before the origin, or passes with diagnostics in log mode.          |
 | 4   | [Normalize request inputs](stage_descriptions/base-04-wt4.md)    | Encoded or disguised inputs match without rewriting allowed traffic.                        |
