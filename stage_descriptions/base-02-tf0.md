@@ -1,139 +1,101 @@
-In this stage, you'll forward HTTP requests and responses between a client and
-the protected application.
+In this stage, you'll forward each request to the protected application and send its response back to the client.
 
-### Why proxy requests first?
+### Reverse Proxies
 
-A firewall must carry legitimate traffic correctly before enforcing security
-policy. A **reverse proxy** accepts a client's request, makes a separate request
-to the application, and returns the application's response. Your firewall will
-inspect these two directions in later stages.
+A firewall can only block requests that pass through it. So yours works as a [reverse proxy](https://en.wikipedia.org/wiki/Reverse_proxy): it receives a client's request, sends the same request to the application, and returns the application's response.
 
 ```text
-Client -- GET /search?q=tea+cup --> Firewall --> Origin
-Client <-- 200 + response body -- Firewall <-- Origin
+client  ── request ──▶  your firewall  ── request ──▶  application
+client  ◀─ response ──  your firewall  ◀─ response ──  application
 ```
 
-### Expected behavior
+The application is called the origin. Your firewall needs to know where to send each request, so it gets the origin's address from the `--origin` flag, like `--origin http://127.0.0.1:8081`. For now, your firewall forwards every request except health checks. It starts blocking requests in later stages.
 
-Forward `GET`, `POST`, `PUT`, `PATCH`, and `DELETE` requests to `--origin`,
-keeping `/health` local. Append the original request path and query string to
-the supplied origin URL.
+### Forwarding Requests
 
-| Direction | Preserve                                                                                              | Adjust                                                    |
-| --------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Request   | Method, path, query, body bytes, and end-to-end headers, including `Authorization` and `Content-Type` | The upstream `Host` must name the origin host and port.   |
-| Response  | Status, body bytes, and end-to-end headers, including `Content-Type` and `X-Request-Id`               | Framing headers must describe the body you actually send. |
+A client can send any method, like `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. For each request other than `GET /health`, your firewall must:
 
-Preserve JSON whitespace and escaping, empty bodies, and unknown fields.
+1. Read the whole request, including its body.
+2. Send the origin the same method, path, query, headers and body. A `GET` can have a body too, so forward it.
+3. Read the origin's whole response, including its body, before sending anything back.
+4. Send the client the origin's status, headers and body.
 
-A redirect is an instruction for the client to make another request. Following
-it inside the firewall would hide the application's original response. Relay
-origin HTTP errors and redirects as responses. Do not follow a redirect.
+Leave out the headers covered in the next sections. Headers your HTTP library adds on its own, like `Date`, are fine.
 
-Once you send the origin's status or body, you cannot replace it if the connection
-fails midway. Buffering lets you return an error instead of a partial response;
-later, it will also let you check responses for secrets.
+Forward the path and query exactly as they arrived. Don't decode them or clean them up: `/docs/../admin?a=b%20c` must reach the origin as `/docs/../admin?a=b%20c`.
 
-Read the complete origin response body before sending its status, headers, or
-body to the client. If the origin connection fails or its response cannot be
-read completely, return HTTP `502` with `Content-Type: application/json`,
-`X-WAF-Match: origin_unavailable`, and this JSON body:
+Don't copy the client's `Host` header, which holds your firewall's address. The origin needs its own address there, and most HTTP client libraries set it for you.
+
+Error statuses and redirects pass through unchanged, so the client gets the origin's `302 Found` as it is. Many HTTP client libraries follow redirects by default, so turn that off.
+
+Keep answering `GET /health` yourself, so health checks work even when the origin is down.
+
+### Hop-by-Hop Headers
+
+Most headers, like `Content-Type` and `Authorization`, are meant for the other end and pass through unchanged. The [`Connection`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Connection) header is different. It names headers that only apply to the connection they arrived on, which are called hop-by-hop headers. For example, `Connection: X-One, X-Two` marks `X-One` and `X-Two` as hop-by-hop.
+
+Your firewall opens its own connections, so it doesn't pass these on. In both directions, leave out `Connection` and every header it names. A message can have several `Connection` headers, and many header APIs return only the first. So use one that returns them all, like `r.Header.Values` in Go or `headers.get_all` in Python.
+
+Also leave out every header whose name starts with `X-WAF-`. WAF is short for web application firewall. Your firewall uses these headers to report what it did, so only its own should reach the client.
+
+Header names are case-insensitive.
+
+### When the Origin Fails
+
+Your firewall can't relay a response when:
+
+- it can't connect to the origin, or
+- the origin closes the connection before sending all the bytes its `Content-Length` promised.
+
+In both cases, respond with [`502 Bad Gateway`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/502) and this body:
 
 ```json
-{ "error": { "rule": "origin_unavailable" } }
+{"error": {"rule": "origin_unavailable"}}
 ```
 
-### Header handling
+Set `Content-Type: application/json` and `X-WAF-Match: origin_unavailable`, which tells the client why your firewall answered by itself. Don't include any of the origin's headers or body.
 
-Your firewall has separate connections to the client and origin. **Hop-by-hop
-headers** control one connection: a client's `Connection: close` should not
-decide whether the firewall keeps its origin connection open. Application
-headers such as `Content-Type` and `Authorization` still carry meaning for the
-application.
-
-Apply these rules to both forwarded requests and origin responses. Match header
-names, names listed in `Connection`, and the `X-WAF-` prefix case-insensitively:
-
-- `Connection: X-Temporary` marks `X-Temporary` as connection-specific, even
-  though it is not in the fixed list. Remove `Connection`, `Keep-Alive`,
-  `Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailer`,
-  `Transfer-Encoding`, and `Upgrade`.
-  Also remove any header named in the comma-separated `Connection` value.
-- Framing tells the receiver where the body ends and must match the outgoing
-  message. For example, a library can decode a chunked response into body bytes
-  that no longer contain chunk markers. Remove the incoming `Content-Length`
-  rather than copying it, and let your HTTP library supply valid framing.
-- Only your firewall should report its decisions. An origin-supplied
-  `X-WAF-Match: xss-script` could falsely label a clean request. Remove headers
-  beginning with `X-WAF-` in both directions; later stages add your own
-  diagnostics after cleanup.
-
-Preserve all remaining application headers.
+This is why step 3 reads the whole response first. Once your firewall has started sending a response, it can't switch to a `502`.
 
 ### Tests
 
-The application is a small customer service with product search, article
-publishing, HTML previews, and record exports. You will protect this same
-application as the course progresses. Its records and secrets are dummy data.
-The tester manages the services. You only implement the firewall.
-
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
+The tester will start the origin and execute your program like this:
 
 ```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
+$ ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-Run the exercise with:
+The addresses and the policy file's path change from run to run, so read them from the flags. `--detector` and `--policy` are for later stages, so you can ignore them for now.
+
+It will then send requests to your firewall, like this one:
 
 ```bash
-codecrafters test
+$ curl -i 'http://127.0.0.1:8080/search?q=tea+cup'
 ```
 
-The tester compares the application's direct response with its response through
-your firewall. The product-search request is equivalent to:
-
-```bash
-curl --include 'http://127.0.0.1:8080/search?q=tea+cup'
-```
-
-Expect HTTP `200`, `X-Request-Id: course-origin`, and:
+Your firewall should return exactly what the origin returns: `200 OK`, `X-Request-Id: course-origin`, and this body:
 
 ```json
-{ "results": [{ "item": "tea cup" }] }
+{"results":[{"item":"tea cup"}]}
 ```
 
-It also publishes an article through your firewall:
+It will also publish an article with `POST /articles`, and send `GET`, `POST`, `PUT`, `PATCH` and `DELETE` requests with bodies. In other cases, the origin returns an error or a redirect, closes the connection early, or isn't running.
 
-```bash
-curl --include http://127.0.0.1:8080/articles \
-  -H 'Content-Type: text/plain' --data-binary 'My first article'
-```
+The tester will verify that:
 
-Expect HTTP `200` and:
-
-```json
-{ "article": "My first article", "published": true }
-```
-
-The tester verifies that the application receives each request unchanged.
-Additional protocol cases check all five methods, exact request bytes and
-headers, error and redirect responses, and connection/reserved-header removal.
-Incomplete responses and an unavailable origin must produce the specified `502`
-without releasing origin content. An origin `400` must remain `400`.
+- The origin receives each request's method, path, query, body and `Authorization` header unchanged, with `Host` set to the origin's address
+- Your firewall's response has the origin's status, body and `X-Request-Id`
+- No `X-WAF-` headers, and no headers named in `Connection`, pass through in either direction
+- Your firewall answers a failed origin with the `502` above, in any JSON spacing, and `GET /health` still returns `200`
+- Each request gets a response within three seconds
 
 ### Notes
 
-- The tester owns the application and detector. Your launch command starts only
-  the firewall. The `curl` commands describe requests made inside the test
-  environment. Running them separately requires services at those addresses.
-- This challenge uses complete, non-streaming HTTP messages. HEAD, upgrades,
-  compressed messages, and chunked request bodies are outside the required
-  subset. Requests with bodies have a valid `Content-Length`.
-- Each proxied test request has a three-second deadline. Keep the earlier health
-  behavior working even when the origin is unavailable. For the full protocol
-  rules, see
-  [HTTP connection-header rules](https://www.rfc-editor.org/rfc/rfc9110.html#section-7.6.1)
-  and
-  [HTTP/1.1 message framing](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3).
+- To try your firewall by hand, run any web server as the origin, like `python3 -m http.server 8081`, which answers `GET` requests. Start your program with `--origin http://127.0.0.1:8081` and send it requests with `curl`. Add `--path-as-is` to send a path with `..` unchanged.
+- Every request and response in this challenge has a `Content-Length` header. You don't need to handle compressed bodies or `HEAD` requests.
+{{#lang_is_go}}
+- `http.HandleFunc` uses Go's `http.ServeMux`, which redirects any path containing `..` to a cleaned-up path. Pass your own `http.Handler` to `http.ListenAndServe` instead, so those paths reach the origin unchanged.
+{{/lang_is_go}}
+{{#lang_is_python}}
+- `urllib.request` follows redirects and raises an error for statuses like `400`, so `http.client` is the simpler fit for talking to the origin. Its `read()` raises `IncompleteRead` when a response ends early.
+{{/lang_is_python}}

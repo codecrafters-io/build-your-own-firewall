@@ -1,128 +1,82 @@
-In this stage, you'll inspect structured request bodies within a strict size
-limit.
+In this stage, you'll parse request bodies, so your firewall checks the values the origin will read.
 
-### Why parse request bodies?
+### Attacks Hidden in Bodies
 
-An application parses a JSON string such as `"\u003cscript"` as `<script`, while
-a raw-text rule sees only escape characters. Forms have their own encoding too.
-Inspect the values the application receives, and reject bodies you cannot fully
-inspect instead of silently forwarding an unchecked remainder.
-
-### Policy and supported bodies
-
-Buffering needs a byte limit to bound memory use, including multibyte characters.
-Inspecting a prefix and forwarding the rest would let an attack hide beyond the
-checked portion. One extra byte distinguishes a body at the limit from one over it.
-
-Add this optional field:
+The origin's preview page also accepts JSON, like `{"comment": "Hello"}`. In JSON, a string can spell any character as an escape: a backslash, a `u` and four hex digits. For example, `\u003c` means `<`. So this body puts a script into the page:
 
 ```json
-{ "inspection": { "max_body_bytes": 4096 } }
+{"comment": "\u003cscript>alert(1)</script>"}
 ```
 
-When configured, read no more than the limit plus one byte. Measure original
-body bytes, not decoded characters. A body larger than the limit returns HTTP
-`413` and `error.rule: "body_too_large"`. A body exactly at the limit remains
-eligible for inspection.
+The origin parses the JSON and reads `<script>alert(1)</script>`. Your firewall checks the raw body, which contains `\u003cscript` but never `<script`, so the rule misses it. Form bodies, like `comment=%3Cscript%3E`, hide it the same way.
 
-For a nonempty body, replace the earlier raw-body inspection input with:
+The fix is the same idea as normalization. Your firewall parses the body itself, and checks the values the origin will read.
 
-| Media type                          | Inputs                                                                        |
-| ----------------------------------- | ----------------------------------------------------------------------------- |
-| `application/json`                  | Every string value recursively, including values in nested objects and arrays |
-| `application/x-www-form-urlencoded` | Each decoded parameter value, preserving repetitions                          |
-| `text/plain`                        | The decoded text                                                              |
+### Body Inspection
 
-Ignore media-type case and parameters such as `; charset=utf-8`. Use the same
-one-layer form decoding as for queries. JSON keys, numbers, booleans, and null
-do not contribute strings. Keep the path, query, and configured header inputs,
-then apply the earlier normalization to every inspection string when enabled.
-
-### Expected failures and forwarding
-
-Malformed or unsupported bodies have no complete inspection result, even in log
-mode. Duplicate JSON keys are also ambiguous: the firewall and application could
-choose different values. Reject these cases before detection or forwarding:
-
-| Body condition                                                                                                                     | Status | `error.rule`       |
-| ---------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------ |
-| Too many bytes                                                                                                                     | `413`  | `body_too_large`   |
-| Invalid UTF-8, malformed JSON, trailing JSON data, duplicate object keys at any depth, non-JSON constants, or invalid form escapes | `400`  | `invalid_request`  |
-| Unsupported media type or a non-identity `Content-Encoding`                                                                        | `415`  | `unsupported_body` |
-
-Size checks take precedence. Empty bodies add no body inputs and need no media
-type. Without `inspection`, retain the earlier body behavior.
-
-For example, an empty request to `/echo` with normalization and inspection
-enabled contributes only `["/echo"]` to the detector, without an empty-string
-placeholder. This applies to empty `POST` bodies too.
-
-After validation, all existing detectors inspect the new inputs. An allowed or
-logged request must reach the origin with its **original body bytes**, media
-type, and other preserved metadata.
-
-### Examples
-
-With normalization, the earlier `<script` rule, and body inspection enabled:
+The policy can now have an `inspection` object:
 
 ```json
-{ "comment": "\u003cscript>alert(1)</script>", "nested": [{ "name": "Mira" }] }
+{"inspection": {"max_body_bytes": 4096}}
 ```
 
-Before normalization, this contributes `<script>alert(1)</script>` and `Mira`.
-Normalization changes the latter to `mira`, so block mode returns HTTP `403`
-with the denylist rule ID before reaching the origin. A form body
-`comment=%3Cscript%3E` must match too. A clean JSON body must retain its
-original whitespace and escapes when forwarded.
+Parsing needs the whole body in memory, so the policy sets a size limit. When the policy has `inspection`, your firewall handles each request's body in this order:
+
+1. If the body is longer than `max_body_bytes`, reject it with `413 Content Too Large` and the rule `body_too_large`. Count bytes, not characters. A body exactly at the limit is fine. You only need to read one byte past the limit to know whether a body is too long.
+2. If the body is empty, it adds no inputs at all, not even an empty string.
+3. Otherwise, find its media type: the `Content-Type` header, ignoring case and anything after a `;`, like `; charset=utf-8`. Then get its inputs:
+
+| Media type | Inputs |
+| --- | --- |
+| `application/json` | every string value, at any depth, but not keys, numbers, booleans or `null` |
+| `application/x-www-form-urlencoded` | each value, decoded like a query value |
+| `text/plain` | the text |
+
+A body with any other media type, or none, gets `415 Unsupported Media Type` with the rule `unsupported_body`. So does a body with a `Content-Encoding` other than `identity`, which means it's compressed.
+
+These body inputs replace the raw body from earlier stages, and the other inputs stay. When normalization is on, NFKC and case folding apply to every input, but only form values get percent-decoded.
+
+### Bodies Your Firewall Can't Parse
+
+Your firewall rejects a body it can't parse with `400` and `invalid_request`:
+
+- bytes that aren't valid UTF-8
+- JSON that doesn't parse, has more data after its value, or uses `NaN` or `Infinity`
+- JSON that repeats a key in any object, like `{"comment": "Hello", "comment": "<script>"}`, because your firewall and the origin might read different values
+- a form value that doesn't decode cleanly, like `%ZZ` or `%FF`
+
+These `413`, `415` and `400` errors use the usual JSON error and `X-WAF-Match`. The request never reaches the detector or the origin. An allowed request reaches the origin with its original body bytes.
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
+The tester will write a policy file and execute your program like this:
 
 ```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
+$ ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-Run the exercise with:
+With normalization, the earlier rules, a `4096`-byte limit and the detector, it will send a comment whose every character is a JSON escape:
 
 ```bash
-codecrafters test
+$ curl -i http://127.0.0.1:8080/preview -H 'Content-Type: application/json' --data-binary '{"comment":"\u003c\u0073\u0063\u0072\u0069\u0070\u0074\u003e\u0061\u006c\u0065\u0072\u0074\u0028\u0031\u0029\u003c\u002f\u0073\u0063\u0072\u0069\u0070\u0074\u003e"}'
 ```
 
-The preview route also accepts JSON and form comments. It parses the comment
-before inserting it into HTML. The exercise uses a `4096`-byte inspection limit
-and the earlier detection policies. The tester sends a JSON-escaped script:
+The origin's page contains `<script>alert(1)</script>`. Your firewall should parse the body, find `<script`, and block it with `403` and `X-WAF-Match: xss-script`. The body `{"comment":"Hello"}` should still get the origin's preview, and reach the origin unchanged.
 
-```bash
-curl --include http://127.0.0.1:8080/preview \
-  -H 'Content-Type: application/json' \
-  --data-binary '{"comment":"\u003c\u0073\u0063\u0072\u0069\u0070\u0074\u003e\u0061\u006c\u0065\u0072\u0074\u0028\u0031\u0029\u003c\u002f\u0073\u0063\u0072\u0069\u0070\u0074\u003e"}'
-```
+It will also use smaller limits with multi-byte characters, form bodies, nested JSON, empty bodies, invalid and unsupported bodies, and check the inputs your firewall sends the detector.
 
-The direct application's HTML contains `<script>alert(1)</script>`. Before body
-parsing, the escaped raw text scores `26` under the supplied model and misses
-the literal denylist. After JSON parsing, your inspection view must expose the
-script to the `xss-script` rule. Return HTTP `403` with that match and no
-forwarded request:
+The tester will verify that:
 
-```json
-{ "error": { "rule": "xss-script" } }
-```
-
-A JSON body `{"comment":"Hello"}` must still return `200` with `Preview: Hello`
-in the application's HTML. Its original JSON bytes must reach the application.
-
-Other cases use smaller policy limits to check inclusive byte boundaries, form
-decoding, exact detector inputs, unchanged clean JSON, invalid bodies, empty
-bodies, and unsupported encodings. With a four-byte limit, the UTF-8 body `éé`
-is eligible, while `ééa` must return HTTP `413`.
+- A body's inputs are its parsed values, normalized, and an empty body adds none
+- The size limit counts bytes, and a body at the limit is allowed
+- Oversized, unsupported and invalid bodies get their errors, and never reach the detector or the origin
+- Allowed requests reach the origin with their original body bytes
 
 ### Notes
 
-- Fixtures use UTF-8 and the declared media type. Multipart uploads, compressed
-  bodies, chunked request bodies, and alternate JSON encodings are outside the
-  required subset. Unsupported nonempty bodies must not be treated as inspected.
-- See the [JSON specification](https://www.rfc-editor.org/rfc/rfc8259.html) and
-  [form-encoding definition](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).
+{{#lang_is_go}}
+- `json.Unmarshal` keeps the last of two repeated keys without an error. To catch repeats, walk the body with `json.Decoder.Token`. A `json.Decoder` stops after the first value, so also check the whole body with `json.Valid`.
+{{/lang_is_go}}
+{{#lang_is_python}}
+- `json.loads` accepts `NaN` and keeps the last of two repeated keys. Pass it `parse_constant` to reject `NaN` and `Infinity`, and `object_pairs_hook` to catch repeated keys.
+{{/lang_is_python}}

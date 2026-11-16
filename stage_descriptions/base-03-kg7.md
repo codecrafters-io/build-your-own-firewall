@@ -1,134 +1,82 @@
-In this stage, you'll block matching attack rules or report their matches in log
-mode.
+In this stage, you'll block requests that match a rule in your firewall's policy, or let them through and report the match.
 
-### Why block before forwarding?
+### Cross-Site Scripting
 
-If an application inserts user input into an HTML page without escaping it, the
-browser may treat that input as code. An attacker could exploit this by
-submitting a `<script>` tag that runs JavaScript in another user's browser.
-This is called Cross-Site Scripting (XSS). Blocking recognizable patterns before
-they reach the application can catch some attempts without changing its code.
-The application still needs to escape user input correctly when inserting it
-into HTML.
+The origin has a preview page that puts a submitted comment into its HTML without escaping it. Escaping would turn `<` into `&lt;`, so a browser shows the comment as text. Without it, if someone submits `<script>alert(1)</script>`, the page contains a working script, and the browser runs it. This attack is called [cross-site scripting](https://developer.mozilla.org/en-US/docs/Web/Security/Attacks/XSS) (XSS). An attacker can trick someone into submitting a comment like that, with a link for example, so the script runs in that person's browser.
 
-Because literal token rules can also match benign traffic, such as a user
-discussing HTML tags in a comment, teams can evaluate new policies in `log` mode
-to observe matches on live traffic before switching to `block` mode.
+The real fix belongs in the origin's code. Until then, your firewall can stop many of these attacks with a simple rule: block any request that contains `<script`.
 
-### Policy and inspection inputs
+### The Policy
 
-Read the file supplied by `--policy` at startup:
+Your firewall's rules live in its policy, a JSON file, so you can update them without editing your code. Your firewall gets the file's path from the `--policy` flag, and reads the policy when it starts. For example, this policy has two rules:
 
 ```json
 {
   "mode": "block",
   "denylist": [
-    { "id": "sql-union", "term": "UNION SELECT" },
-    { "id": "xss-script", "term": "<script" }
+    {"id": "xss-script", "term": "<script"},
+    {"id": "admin-page", "term": "/admin"}
   ]
 }
 ```
 
-For now, inspect two strings independently: the raw request target (path plus
-query) and the request body interpreted as UTF-8 text. A match is a literal,
-case-sensitive substring within either string. Do not combine their boundaries
-or decode percent escapes yet. Read rule IDs and terms from policy.
+The `denylist` is a list of rules. Each rule has an `id`, and a `term` to look for in each request. If `mode` is missing, use `block`. If `denylist` is missing or empty, there are no rules.
 
-- **Matching order:** Evaluate `denylist` rules in policy order. The first rule
-  whose `term` appears in either inspection string wins, regardless of which
-  string contains the match.
-- **Defaults:** If `mode` is omitted, use `block`. If `denylist` is empty or
-  omitted, this stage adds no rule matches. Keep the proxy behavior from earlier
-  stages.
+### Matching Rules
 
-### Expected decisions
+For now, your firewall looks for each term in two strings:
 
-Callers need to know which rule acted without receiving reflected attack content
-or private request data. Use a rule ID in the response, and keep diagnostics
-local to each request so a previous match cannot mislead the next caller.
+- the request target, which is the path and query exactly as they arrived, like `/search?q=tea+cup`
+- the request body, read as UTF-8 text
 
-| Situation             | Client result                                                  | Origin receives request? |
-| --------------------- | -------------------------------------------------------------- | ------------------------ |
-| Match in `block` mode | HTTP `403`, JSON error, `X-WAF-Match` set to the rule ID       | No                       |
-| Match in `log` mode   | Original origin response plus `X-WAF-Match` set to the rule ID | Yes, unchanged           |
-| No match              | Original origin response, without `X-WAF-Match`                | Yes, unchanged           |
+A rule matches when its term appears in either string, as a case-sensitive substring. So `<script` matches `<script>alert(1)</script>`, but not `<SCRIPT>`. Go through the rules in the order the policy lists them, and use the first one that matches.
 
-Add `X-WAF-Match` only to the client-facing response. Do not forward it upstream
-to the origin.
+### Block and Log Modes
 
-For a block, send `Content-Type: application/json` and this shape:
+In `block` mode, a matching request never reaches the origin. Your firewall answers `403 Forbidden` with this body:
 
 ```json
-{ "error": { "rule": "xss-script" } }
+{"error": {"rule": "xss-script"}}
 ```
 
-Every error your firewall generates, including `origin_unavailable` and the
-errors added in later stages, uses this shape and an `X-WAF-Match` header naming
-its rule. The error must not echo request content. Match headers describe only
-the current request. A later clean request must not inherit an earlier match.
+Set `Content-Type: application/json`, and `X-WAF-Match` to the matching rule's `id`. This is the same shape as the `502` error from earlier stages.
+
+A new rule can also match harmless requests, like a comment about HTML tags. So teams often run a new policy in `log` mode first. The `mode` applies to every rule in the policy. In `log` mode, your firewall forwards a matching request as usual, and adds `X-WAF-Match` to the origin's response. The match shows up, but nobody gets blocked.
+
+A request that matches no rule gets the origin's response with no `X-WAF-Match`, even right after a request that matched.
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
+The tester will write a policy file and execute your program like this:
 
 ```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
+$ ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-Run the exercise with:
+`--detector` is for later stages. The tester will start with a `log` mode policy that has the `xss-script` rule above, and send a comment to the preview page:
 
 ```bash
-codecrafters test
+$ curl -i http://127.0.0.1:8080/preview -H 'Content-Type: text/plain' --data-binary '<script>alert(1)</script>'
 ```
 
-The preview route deliberately interpolates a submitted comment into an HTML
-document without escaping it. The tester first uses log mode with the
-`xss-script` rule and sends:
-
-```bash
-curl --include http://127.0.0.1:8080/preview \
-  -H 'Content-Type: text/plain' --data-binary '<script>alert(1)</script>'
-```
-
-The direct application and the log-mode firewall both return HTTP `200` with
-`Content-Type: text/html; charset=utf-8` and:
+Your firewall should return the origin's `200 OK` page, with `X-WAF-Match: xss-script`. The page contains the script:
 
 ```html
-<!doctype html><title>Preview</title>
-<div>
-  Preview:
-  <script>
-    alert(1);
-  </script>
-</div>
+<!doctype html><title>Preview</title><div>Preview: <script>alert(1)</script></div>
 ```
 
-Your log-mode response must also carry `X-WAF-Match: xss-script`. The test
-output shows that the application received the request. This is a reflected-XSS
-fixture: a browser can execute the script in this HTML. The tester displays the
-response without executing JavaScript.
+It will then restart your program in `block` mode and send the same request. This time, your firewall should respond with the `403` error and `X-WAF-Match: xss-script`, and the origin should receive nothing. A preview with the body `Hello` should still get the origin's page.
 
-The tester restarts your firewall in block mode and repeats the request. Expect
-HTTP `403`, `X-WAF-Match: xss-script`, and only:
+It will also check rule order, case-sensitive matching, a policy without `mode`, and clean requests right after a match.
 
-```json
-{ "error": { "rule": "xss-script" } }
-```
+The tester will verify that:
 
-The application must receive no request through the firewall. A clean preview
-with body `Hello` must still return `200` with `Preview: Hello` in the HTML.
-Other cases check rule order, case-sensitive matching, and request-local
-headers.
+- In `block` mode, a matching request gets the `403` error, and the origin never receives it
+- In `log` mode, a matching request is forwarded as usual, and the response has `X-WAF-Match`
+- The first matching rule in the policy's order wins
+- A request that matches no rule gets no `X-WAF-Match`
 
 ### Notes
 
-- Supplied mode values are `block` or `log`. Rules have unique IDs and nonempty
-  terms. The tester restarts your program when policy changes. Live reloading is
-  unnecessary. Keep all earlier behavior working.
-- Fixtures here contain valid UTF-8 text. These literal rules do not establish
-  that an unmatched request is safe. Encoded spellings are handled in later
-  stages. There is no persistent audit-log requirement.
-- For a production rule-set perspective, see the
-  [OWASP Core Rule Set](https://coreruleset.org/docs/).
+- You don't need to watch the policy file for changes. A new policy takes effect when your firewall restarts.
+- A term like `<script` misses other spellings of the same attack, like `<SCRIPT>`. You'll catch those in later stages.
