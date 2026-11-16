@@ -64,7 +64,7 @@ $ ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8
 $ curl -i 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
 ```
 
-The origin's search page leaks the private row when the search text has both `or 1=1` and `--`, and the tester shows that first. Your firewall should block the request with `403`, `X-WAF-Match: heuristic_score`, `X-WAF-Score: 5`, both signal IDs, and `{"error": {"rule": "heuristic_score"}}`. A product search, `GET /search?q=tea+cup`, should still return the origin's results.
+The tester first sends this request straight to the origin, whose search page leaks the private row when the search text has both `or 1=1` and `--`. It then sends the same request through your firewall, which should block it with `403`, `X-WAF-Match: heuristic_score`, `X-WAF-Score: 5`, both signal IDs, and `{"error": {"rule": "heuristic_score"}}`. A product search, `GET /search?q=tea+cup`, should still return the origin's results.
 
 It will also send a signal repeated across parameters, a clean request, and a request that a denylist rule decides.
 

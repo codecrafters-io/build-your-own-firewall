@@ -57,7 +57,7 @@ With the `response` object above and the earlier policies, it will send:
 $ curl -i http://127.0.0.1:8080/debug
 ```
 
-The tester's output first shows the origin's own `500` response with the key. Your firewall should respond `403` with `X-WAF-Match: response_leak` and `{"error": {"rule": "response_leak"}}`, without the key or the origin's `X-Request-Id`. The origin should still receive the request. A product search, `GET /search?q=tea+cup`, should still return the origin's results.
+The tester first sends this request straight to the origin, and shows its `500` response with the key. It then sends the same request through your firewall, which should respond `403` with `X-WAF-Match: response_leak` and `{"error": {"rule": "response_leak"}}`, without the key or the origin's `X-Request-Id`. The origin should still receive the request. A product search, `GET /search?q=tea+cup`, should still return the origin's results.
 
 It will also check escaped JSON values and keys, repeated keys, invalid JSON, invalid UTF-8, a small size limit, `log` mode, and clean responses that contain part of a secret's pattern.
 

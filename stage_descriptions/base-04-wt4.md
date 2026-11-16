@@ -62,7 +62,7 @@ $ ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8
 $ curl -i 'http://127.0.0.1:8080/search?q=union+select+password+from+users'
 ```
 
-The tester's output first shows the origin's own response, which leaks a row with `DUMMY_PRIVATE_HASH`. Your firewall should block the request with `403`, `X-WAF-Match: sql-union` and `{"error": {"rule": "sql-union"}}`. A product search, `GET /search?q=tea+cup`, should still return the origin's results.
+The tester first sends this request straight to the origin, and shows its response, which leaks a row with `DUMMY_PRIVATE_HASH`. It then sends the same request through your firewall, which should block it with `403`, `X-WAF-Match: sql-union` and `{"error": {"rule": "sql-union"}}`. A product search, `GET /search?q=tea+cup`, should still return the origin's results.
 
 It will also send values encoded twice, full-width letters in a header, mixed-case and non-English text, terms split across parameters, invalid encodings, and requests in `log` mode.
 
