@@ -1,10 +1,10 @@
-In this stage, you'll score each request by adding up weak attack signals, and block requests whose score is too high.
+In this stage, you'll score each request by adding up weak attack signals, and block or log the requests whose score is too high.
 
 ### Weak Signals
 
 Some attack patterns are too common to block on their own. `or 1=1` is a classic piece of [SQL injection](https://owasp.org/www-community/attacks/SQL_Injection), but it also shows up when people write about SQL. `--` starts a SQL comment, but it also shows up in command-line options like `--help`. When both appear in one request, though, it looks like an attack. `or 1=1` makes a query's condition always true, and `--` turns the rest of the query into a comment, so the query returns every row.
 
-So instead of blocking on each pattern, your firewall gives each one a weight, and adds up the weights of the patterns a request contains. The total is the request's score, and a request is blocked when its score reaches a threshold. This is called [anomaly scoring](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/).
+So instead of blocking on each pattern, your firewall gives each one a weight, and adds up the weights of the patterns a request contains. The total is the request's score, and a request whose score reaches a threshold matches a rule. This is called [anomaly scoring](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/).
 
 ### Signals and Scores
 

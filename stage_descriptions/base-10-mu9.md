@@ -70,7 +70,7 @@ The tester will verify that:
 - A request that fails a patch gets the `403` and never reaches the origin
 - Patches match the method and the decoded path exactly
 - Patches still apply in `log` mode and while the detector is down
-- Allowed requests reach the origin unchanged, and every earlier stage's cases still pass
+- Allowed requests reach the origin unchanged, and the cases from earlier stages still pass
 
 ### Notes
 
