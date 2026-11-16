@@ -1,130 +1,79 @@
-In this stage, you'll withhold responses that expose a protected pattern or
-exceed the inspection limit.
+In this stage, you'll check the origin's responses, and withhold any response that would leak a secret.
 
-### Why inspect responses before release?
+### Response Leaks
 
-A clean-looking request can trigger an application error containing an internal
-secret. Request rules cannot catch a value that appears only in the response.
-Inspect the complete response before releasing its status, headers, or body so a
-later denial cannot arrive after the protected bytes have escaped.
+Some leaks start with a harmless request. The origin's `/debug` page has a bug: it answers with an error that includes an internal key.
 
-### Policy
+```text
+HTTP/1.1 500 Internal Server Error
+Content-Type: application/json
+X-Request-Id: course-origin
 
-Buffering needs a memory bound; releasing an inspected prefix would leave the
-unchecked remainder free to expose a secret. The policy sets a body size limit
-and the patterns to withhold.
-
-Add an optional `response` object:
-
-```json
-{
-  "response": {
-    "max_bytes": 65536,
-    "deny_patterns": ["INTERNAL_KEY_[A-Z0-9]+"]
-  }
-}
+{"debug":"INTERNAL_KEY_7F2A"}
 ```
 
-The regular-expression syntax is the same subset used by heuristic signals.
-These patterns are trusted policy, not values supplied by the client or origin.
+No request rule can catch this, because there's nothing wrong with the request. Your firewall has to check the response instead, before any of it reaches the client.
 
-### Expected behavior
+### Response Inspection
 
-One extra byte reveals an oversized response. For every origin response,
-including error statuses, read no more than `max_bytes + 1` body bytes before
-sending anything to the client.
+The policy can now have a `response` object:
 
-| Condition                | Client result                                            |
-| ------------------------ | -------------------------------------------------------- |
-| Body exceeds `max_bytes` | HTTP `502`, `error.rule: "response_too_large"`           |
-| A deny pattern matches   | HTTP `403`, `error.rule: "response_leak"`                |
-| Neither condition        | Original status, exact body bytes, and preserved headers |
+```json
+{"response": {"max_bytes": 65536, "deny_patterns": ["INTERNAL_KEY_[A-Z0-9]+"]}}
+```
 
-JSON escapes can hide a secret from raw-text matching, and either a key or a
-value can leak it. Search decoded strings as well as raw text, which also covers
-HTML error pages and malformed JSON.
+When the policy has `response`, your firewall checks every response from the origin, whatever its status, in this order:
 
-Size takes precedence over pattern inspection. Search the body decoded as UTF-8,
-replacing invalid byte sequences for inspection only. When the body is valid
-JSON, also search each decoded string, including object keys, at every nesting
-depth and across duplicate-key values. Nonstandard constants such as `NaN` and
-`Infinity` make the body invalid JSON. In that case, search only the raw-text
-inspection copy. Malformed or non-JSON bodies also use raw-text inspection
-rather than a JSON-validation denial. Do not join separate strings or normalize,
-percent-decode, or base64-decode response content. An allowed response retains
-its original body bytes, including any invalid UTF-8.
+1. Read the body, but at most `max_bytes` + 1 bytes of it. If the response ends early, before its `Content-Length`, respond with the `origin_unavailable` error, as before. If the body is longer than `max_bytes`, respond `502` with the rule `response_too_large`.
+2. Search the body for each of the `deny_patterns`, which are regular expressions. If any matches, respond `403` with the rule `response_leak`.
+3. Otherwise, send the origin's response as usual, with its body bytes unchanged.
 
-For either denial, send `Content-Type: application/json`, the corresponding
-`X-WAF-Match`, and the standard error shape. Release no origin bytes or origin
-headers, including `X-Request-Id`. Error content must not echo the protected
-match.
+Your firewall still forwards the request, so the origin still handles it. Only the response is withheld.
 
-A protected response match identifies content the policy says must not leave.
-Response checks remain enforced when policy `mode` is `log`: a response denial
-still blocks the response and replaces any earlier log-mode `X-WAF-Match` header.
-Preserve request-detection diagnostic headers, including heuristic and ML scores,
-fired signals, and detector status. Without `response`, retain earlier relay
-behavior.
+These `403` and `502` responses are your firewall's own, so they carry none of the origin's headers or body, and they use the usual JSON error. Response checks apply in `log` mode too, since a secret mustn't leave even while you're testing request rules. If a request rule matched in `log` mode, `X-WAF-Match` names only the response rule.
 
-An incomplete origin response still returns HTTP `502` with
-`error.rule: "origin_unavailable"`. Buffering within the size limit does not
-make a truncated body safe to release.
+### Where Secrets Hide
+
+Search these strings for each pattern, without normalizing them:
+
+- the body as text, with any bytes that aren't valid UTF-8 replaced by `�` (U+FFFD), for searching only
+- if the body is valid JSON, which also means valid UTF-8, every string in it, decoded, including keys, at any depth
+
+JSON escapes can hide a secret from the plain text. The body `{"debug": "\u0049NTERNAL_KEY_7F2A"}` doesn't contain `INTERNAL_KEY` as text, but its decoded value does. A key can hold a secret too. So can the first value of a repeated key, since many JSON parsers keep only the last value. They'd only see `clean` in `{"debug": "\u0049NTERNAL_KEY_7F2A", "debug": "clean"}`.
+
+A body that isn't valid JSON, like an HTML error page, only gets the text search. That includes JSON with `NaN` or `Infinity`, which valid JSON doesn't allow.
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
+The tester will write a policy file and execute your program like this:
 
 ```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
+$ ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-Run the exercise with:
+With the `response` object above and the earlier policies, it will send:
 
 ```bash
-codecrafters test
+$ curl -i http://127.0.0.1:8080/debug
 ```
 
-The application's `/debug` route returns HTTP `500` with a dummy internal key.
-The tester prints that direct response, then sends the same request through your
-firewall with the response policy above:
+The tester's output first shows the origin's own `500` response with the key. Your firewall should respond `403` with `X-WAF-Match: response_leak` and `{"error": {"rule": "response_leak"}}`, without the key or the origin's `X-Request-Id`. The origin should still receive the request. A product search, `GET /search?q=tea+cup`, should still return the origin's results.
 
-```bash
-curl --include http://127.0.0.1:8080/debug
-```
+It will also check escaped JSON values and keys, repeated keys, invalid JSON, invalid UTF-8, a small size limit, `log` mode, and clean responses that contain part of a secret's pattern.
 
-The direct body is:
+The tester will verify that:
 
-```json
-{ "debug": "INTERNAL_KEY_7F2A" }
-```
-
-The client must receive HTTP `403`, `X-WAF-Match: response_leak`, and only:
-
-```json
-{ "error": { "rule": "response_leak" } }
-```
-
-Neither the key nor the origin `X-Request-Id` may escape. The output confirms
-that one request reached the application: response inspection withholds the
-result of processing rather than preventing that processing. A clean product
-search must still return `200` with product results.
-
-Other cases check escaped JSON values and keys, duplicate-key values, raw-text
-fallback for nonstandard JSON constants, invalid UTF-8 inspection, size limits,
-log-mode match replacement, and unchanged clean responses. An escaped
-`"\u0049NTERNAL_KEY_7F2A"` must be caught after JSON decoding. A clean response
-with partial marker `INTERNAL_` must pass unchanged when it fits the size limit.
+- A response that matches a pattern gets the `403`, with none of the origin's headers or body
+- A response over `max_bytes` gets the `502`
+- Patterns are searched in the text, and in every decoded JSON string when the body is valid JSON
+- Clean responses reach the client with their exact bytes
+- Response checks apply in `log` mode too
 
 ### Notes
 
-- The application has already received and processed the request when a response
-  is denied. This check does not undo its side effects.
-- This challenge uses complete, uncompressed responses. Streaming inspection
-  requires a different release strategy and is proposed as an extension.
-  Patterns match only the protected representations specified here. They are not
-  a guarantee against every possible data leak.
-- The
-  [OWASP CRS scoring overview](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/)
-  also distinguishes request and response enforcement.
+{{#lang_is_go}}
+- `encoding/json` keeps only the last value of a repeated key, so walk the body with `json.Decoder.Token` to see them all. Call `UseNumber` first, so a huge number like `1e400` doesn't stop the walk.
+{{/lang_is_go}}
+{{#lang_is_python}}
+- `json.loads` accepts `NaN`, so pass `parse_constant` as in earlier stages, and use `object_pairs_hook` to see every value of a repeated key. `HTTPResponse.read(n)` returns a short body without an error when the origin closes early. So when a body fits within `max_bytes`, check that you got all the bytes its `Content-Length` promised.
+{{/lang_is_python}}
