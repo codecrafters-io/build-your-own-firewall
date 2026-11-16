@@ -1,4 +1,4 @@
-In this stage, you'll ask a machine learning detector to score each request, and block the requests it rates as attacks.
+In this stage, you'll ask a machine learning detector to score the requests your firewall checks, and block the ones it rates as attacks.
 
 ### ML Detection
 
