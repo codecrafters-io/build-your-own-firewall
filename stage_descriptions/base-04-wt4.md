@@ -75,7 +75,7 @@ The tester will verify that:
 
 ### Notes
 
-- Some HTTP servers reject a path like `/search%ZZ` before your code runs. The tester only checks for a `400` there, since your firewall can't add its JSON error.
+- Some HTTP servers reject a path like `/search%ZZ` with their own `400` before your code runs. That's fine, even without your JSON error, since the request still never reaches the origin.
 {{#lang_is_go}}
 - The starter's `go.mod` includes `golang.org/x/text`. Use `norm.NFKC.String` from `golang.org/x/text/unicode/norm`, and `cases.Fold().String` from `golang.org/x/text/cases`. `strings.ToLower` doesn't turn `ß` into `ss`.
 - `url.QueryUnescape` returns an error for `%ZZ`, but not for invalid UTF-8 like `%FF`, so also check the result with `utf8.ValidString`.

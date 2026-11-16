@@ -4,7 +4,7 @@ In this stage, you'll ask a machine learning detector to score the requests your
 
 Your rules only catch the patterns you wrote down, and an attacker can change an attack until none of them match. For example, `1' AND SLEEP(5)#` is a common SQL injection probe, a request that tests whether an attack works. It asks the database to pause for five seconds. If the response comes back five seconds late, the attacker knows the database ran their input. `#` starts a comment in some databases, like `--`. The probe has no `union select`, no `or 1=1` and no `--`.
 
-A [classification model](https://developers.google.com/machine-learning/glossary#classification-model) can catch attacks like this. It learned from many examples of attacks and normal requests, and it scores a new request by how much it looks like an attack. The tester runs one as a separate service, called the detector, and passes its address with `--detector`.
+A [classification model](https://developers.google.com/machine-learning/glossary#classification-model) can catch attacks like this. It learned from many examples of attacks and normal requests, and it scores a new request by how much it looks like an attack. The model runs as a separate service, called the detector, and your firewall gets its address from the `--detector` flag.
 
 A detector can be wrong, slow or down. So your firewall treats its score as one more piece of evidence, and doesn't wait for it long.
 

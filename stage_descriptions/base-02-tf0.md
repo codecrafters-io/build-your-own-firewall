@@ -9,11 +9,11 @@ client  ── request ──▶  your firewall  ── request ──▶  appli
 client  ◀─ response ──  your firewall  ◀─ response ──  application
 ```
 
-The application is called the origin. The tester passes its address with `--origin`, like `--origin http://127.0.0.1:8081`. For now, your firewall forwards every request except health checks. It starts blocking requests in later stages.
+The application is called the origin. Your firewall needs to know where to send each request, so it gets the origin's address from the `--origin` flag, like `--origin http://127.0.0.1:8081`. For now, your firewall forwards every request except health checks. It starts blocking requests in later stages.
 
 ### Forwarding Requests
 
-The tester sends `GET`, `POST`, `PUT`, `PATCH` and `DELETE` requests. For each request other than `GET /health`, your firewall must:
+A client can send any method, like `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. For each request other than `GET /health`, your firewall must:
 
 1. Read the whole request, including its body.
 2. Send the origin the same method, path, query, headers and body. A `GET` can have a body too, so forward it.
@@ -79,7 +79,7 @@ Your firewall should return exactly what the origin returns: `200 OK`, `X-Reques
 {"results":[{"item":"tea cup"}]}
 ```
 
-It will also publish an article with `POST /articles` and send each method with a body. In other cases, the origin returns an error or a redirect, closes the connection early, or isn't running.
+It will also publish an article with `POST /articles`, and send `GET`, `POST`, `PUT`, `PATCH` and `DELETE` requests with bodies. In other cases, the origin returns an error or a redirect, closes the connection early, or isn't running.
 
 The tester will verify that:
 

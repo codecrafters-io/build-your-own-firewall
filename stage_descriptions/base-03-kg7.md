@@ -8,7 +8,7 @@ The real fix belongs in the origin's code. Until then, your firewall can stop ma
 
 ### The Policy
 
-Your firewall's rules come from its policy, a JSON file whose path the tester passes with `--policy`. Read it when your program starts. For example:
+Your firewall's rules live in its policy, a JSON file, so you can update them without editing your code. Your firewall gets the file's path from the `--policy` flag, and reads the policy when it starts. For example, this policy has two rules:
 
 ```json
 {
@@ -78,5 +78,5 @@ The tester will verify that:
 
 ### Notes
 
-- The tester restarts your program whenever the policy changes, so you only need to read the policy once.
+- You don't need to watch the policy file for changes. A new policy takes effect when your firewall restarts.
 - A term like `<script` misses other spellings of the same attack, like `<SCRIPT>`. You'll catch those in later stages.
