@@ -27,7 +27,7 @@ With normalization on, your firewall checks these inputs instead of the raw targ
 
 Percent-decoding turns each `%XX` into one byte, and the bytes are then read as UTF-8. So `/search?q=caf%C3%A9&lang=en` gives the inputs `/search`, `café` and `en`, plus the body. To find the values, split the query on `&`, then split each parameter at its first `=`. A parameter without `=` has an empty value. Only the values are checked, not the names.
 
-Decode each input exactly once, because that's what the origin does. `%253C` decodes to `%3C`, not `<`.
+Decode the path and each query value exactly once, because that's what the origin does. `%253C` decodes to `%3C`, not `<`.
 
 Keep the inputs separate when matching. Joining them could invent a match, like `union` in one parameter and ` select` in the next.
 
@@ -68,7 +68,7 @@ It will also send values encoded twice, full-width letters in a header, mixed-ca
 
 The tester will verify that:
 
-- Each input is decoded once, normalized, and checked on its own
+- The path and query values are decoded once, and every input is normalized and checked on its own
 - Query parameter names aren't checked
 - Invalid encodings get the `400` error and never reach the origin
 - The origin receives the original request, not the decoded copy, even when a rule matches in `log` mode
