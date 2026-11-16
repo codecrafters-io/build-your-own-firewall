@@ -1,139 +1,80 @@
-In this stage, you'll combine weighted attack signals into one request score.
+In this stage, you'll score each request by adding up weak attack signals, and block requests whose score is too high.
 
-### Why combine weak signals?
+### Weak Signals
 
-A single suspicious fragment can appear in legitimate traffic: `--` occurs in
-command-line examples, and `or 1=1` may appear in programming discussions. In a
-vulnerable SQL query, however, an injected `OR 1=1` can make a condition always
-true, while `--` can comment out the remaining SQL.
+Some attack patterns are too common to block on their own. `or 1=1` is a classic piece of [SQL injection](https://owasp.org/www-community/attacks/SQL_Injection), but it also shows up when people write about SQL. `--` starts a SQL comment, but it also shows up in command-line options like `--help`. When both appear in one request, though, it looks like an attack. `or 1=1` makes a query's condition always true, and `--` turns the rest of the query into a comment, so the query returns every row.
 
-Anomaly scoring lets these signals contribute weights toward a request total.
-With the policy below, their weights combine as `3 + 2 = 5`, reaching the
-enforcement threshold. This score measures matched signals, not attack
-probability.
+So instead of blocking on each pattern, your firewall gives each one a weight, and adds up the weights of the patterns a request contains. The total is the request's score, and a request is blocked when its score reaches a threshold. This is called [anomaly scoring](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/).
 
-### Policy
+### Signals and Scores
 
-Repeated `--` in a legitimate article is still one kind of evidence. Counting
-distinct signals prevents repetition alone from turning one weak signal into
-several reasons to block.
-
-Add an optional `heuristics` object alongside earlier fields:
+The policy can now have a `heuristics` object:
 
 ```json
 {
   "heuristics": {
     "threshold": 5,
     "signals": [
-      { "id": "sql-or", "pattern": "or\\s+1\\s*=\\s*1", "weight": 3 },
-      { "id": "sql-comment", "pattern": "--", "weight": 2 }
+      {"id": "sql-or", "pattern": "or\\s+1\\s*=\\s*1", "weight": 3},
+      {"id": "sql-comment", "pattern": "--", "weight": 2}
     ]
   }
 }
 ```
 
-Each pattern is a regular expression searched anywhere within each current
-inspection input. Use the normalized inputs when normalization is enabled. A
-pattern cannot span input boundaries.
+Each signal's `pattern` is a regular expression, and weights and thresholds are whole numbers. A signal fires when its pattern matches anywhere in any of the request's inputs, the same inputs your rules check. The score is the sum of the weights of the signals that fired. A signal counts once, however many times it matches.
 
-The request score is the sum of weights of **distinct matching signals**. A
-signal contributes once even if its pattern repeats or matches several inputs.
-Signals in different inputs can contribute to the same request score.
+Each pattern has to match within one input, but the score adds up signals from different inputs.
 
-### Expected behavior
+For example, with the policy above:
 
-If a denylist rule matches, it still supplies the decision. Otherwise, a score
-greater than or equal to `threshold` selects `heuristic_score`, using the
-existing block/log behavior. Without `heuristics`, retain earlier behavior.
+| Inputs | Fired signals | Score | Result |
+| --- | --- | --- | --- |
+| `or 1=1` | `sql-or` | 3 | allowed |
+| `or 1=1 or 1=1` | `sql-or` | 3 | allowed |
+| `or 1=1 --` | `sql-or`, `sql-comment` | 5 | blocked |
+| `or 1=1` and `--`, in two inputs | `sql-or`, `sql-comment` | 5 | blocked |
 
-Diagnostics help explain decisions and tune false positives. Scores on allowed
-requests show how close legitimate traffic comes to the cutoff.
+If a denylist rule matches, it decides, as before. Otherwise, a score at or above the `threshold` matches a rule called `heuristic_score`, which blocks or logs like any other rule.
 
-With heuristics configured, report complete diagnostics on the client-facing
-response for every inspected request, including allowed requests, log-mode
-matches, and `403` blocks. Report the full score and all fired signals even when
-a denylist rule wins. Do not forward these diagnostic headers to the origin:
+### Score Headers
+
+To help tune the weights, your firewall reports the score on its response to every request it checks, whether it allowed, logged or blocked it:
 
 ```text
 X-WAF-Score: 5
 X-WAF-Signals: sql-or,sql-comment
 ```
 
-The score header is an integer. List each fired ID once, comma-separated, in any
-order. With no matches, report score `0` and omit the signal header or leave it
-empty. Do not copy diagnostics from an earlier request.
+`X-WAF-Score` is the score, as a whole number. `X-WAF-Signals` lists the IDs of the signals that fired, each once, in any order, separated by commas with no spaces. When no signal fires, send `X-WAF-Score: 0` and leave out `X-WAF-Signals`. When a denylist rule decides, still send the full score and every fired signal.
 
-Local `GET /health` requests and validation errors that occur before scoring
-skip heuristic evaluation and omit `X-WAF-Score` and `X-WAF-Signals`.
-
-### Examples
-
-With normalization enabled and the policy above:
-
-| Inspected inputs                       | Score | Decision          |
-| -------------------------------------- | ----- | ----------------- |
-| `or 1=1`                               | 3     | Allow             |
-| `or 1=1 --`                            | 5     | `heuristic_score` |
-| `or 1=1 or 1=1`                        | 3     | Allow             |
-| `or 1=1` in one input, `--` in another | 5     | `heuristic_score` |
-
-A block returns HTTP `403`, `Content-Type: application/json`, the diagnostics
-above, and:
-
-```json
-{ "error": { "rule": "heuristic_score" } }
-```
-
-The origin must receive nothing. In log mode, the original request reaches it
-and the response reports `X-WAF-Match: heuristic_score`.
+Only send these headers when the policy has `heuristics`.
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
+The tester will write a policy file and execute your program like this:
 
 ```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
+$ ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-Run the exercise with:
+`--detector` is for later stages. With normalization on and the `heuristics` above, the tester will send:
 
 ```bash
-codecrafters test
+$ curl -i 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
 ```
 
-With normalization and the heuristic policy above, the tester sends:
+The origin's search page leaks the private row when the search text has both `or 1=1` and `--`, and the tester shows that first. Your firewall should block the request with `403`, `X-WAF-Match: heuristic_score`, `X-WAF-Score: 5`, both signal IDs, and `{"error": {"rule": "heuristic_score"}}`. A product search, `GET /search?q=tea+cup`, should still return the origin's results.
 
-```bash
-curl --include 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
-```
+It will also send a signal repeated across parameters, a clean request, and a request that a denylist rule decides.
 
-The application simulates a leaked private row when the decoded query combines
-`or 1=1` and `--`. Its direct response contains `DUMMY_PRIVATE_HASH`. The tester
-prints that baseline before making the same request through your firewall.
+The tester will verify that:
 
-Your firewall must return HTTP `403`, `X-WAF-Score: 5`, both signal IDs, and:
-
-```json
-{ "error": { "rule": "heuristic_score" } }
-```
-
-The application must receive no forwarded attack. A clean `q=tea+cup` search
-still returns `200` with product results. These are simulated SQL-injection
-consequences, not executed SQL.
-
-Other cases check repeated signals, clean-request diagnostics, and denylist
-precedence while retaining the full heuristic score and all fired signal IDs.
-The tester accepts either ID order, but missing, repeated, or extra IDs fail.
+- The score adds up each fired signal's weight once
+- A score at or above the threshold gets `heuristic_score`, unless a denylist rule matched
+- Every checked request's response has `X-WAF-Score`, and `X-WAF-Signals` when signals fired
+- `X-WAF-Signals` has no missing, repeated or extra IDs
 
 ### Notes
 
-- Supplied signal IDs are unique. Weights and thresholds are positive integers.
-  Patterns use syntax shared by Go's regular-expression library and Python's
-  `re`, without flags or backreferences.
-- The patterns are small teaching examples, not a complete SQL injection
-  detector.
-- The
-  [OWASP CRS anomaly-scoring documentation](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/)
-  explains the broader separation of detection and enforcement.
+- These signals are small teaching examples, not a complete SQL injection detector.

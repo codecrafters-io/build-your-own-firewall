@@ -1,152 +1,86 @@
-In this stage, you'll inspect decoded, normalized request inputs without
-changing forwarded traffic.
+In this stage, you'll decode and normalize the strings your firewall checks, so encoded attacks can't slip past its rules.
 
-### Why normalize only the inspection view?
+### Encoded Attacks
 
-If a firewall inspects raw request bytes while the protected application decodes
-or transforms its inputs, payloads can slip past literal rules. For example, a
-rule looking for `<script` will miss `%3Cscript` in a query string that the web
-framework percent-decodes, or full-width `＜ＳＣＲＩＰＴ` if a downstream
-component applies compatibility normalization and case folding.
+The origin's search page has a flaw. When the search text contains `union select`, the page leaks a private row from the origin's user table. This mimics [SQL injection](https://owasp.org/www-community/attacks/SQL_Injection), where an attacker's input changes a database query. The origin doesn't run real SQL, so the leak is simulated.
 
-An _inspection view_ is a transformed copy used for matching. Keep original bytes
-for forwarding: rewriting an allowed request can change its meaning or break a
-signature over its contents. This course uses a fixed pipeline; in production,
-it must account for how the protected application actually interprets inputs.
+So your policy has a rule for it, with the term `union select`. But a URL can't contain a space, so the attack arrives like this:
 
-### The inspection view
-
-Extra decoding can make harmless text look like an attack: the search application
-decodes `%253Cscript` once to `%3Cscript`, not `<script`. Joining separate inputs
-can likewise invent a match, such as `union` in one parameter and ` select` in
-another. Decode once and inspect inputs separately.
-
-Add these optional policy fields:
-
-```json
-{
-  "normalization": true,
-  "inspect_headers": ["X-Search"],
-  "denylist": [{ "id": "xss-script", "term": "<script" }],
-  "mode": "block"
-}
+```text
+GET /search?q=union+select+password+from+users
 ```
 
-When `normalization` is true, replace the raw-target inspection from earlier
-stages with these separate strings:
+The origin [percent-decodes](https://developer.mozilla.org/en-US/docs/Glossary/Percent-encoding) the query and turns each `+` into a space, so it sees `union select password from users`. Your firewall checks the raw target, which only contains `union+select`, so the rule never matches.
 
-| Source  | Inspection input                                                                  |
-| ------- | --------------------------------------------------------------------------------- |
-| Path    | Percent-decoded once, keeping `+` as `+`                                          |
-| Query   | Each parameter's value, percent-decoded once, with `+` becoming a space           |
-| Headers | Each UTF-8 header occurrence named by `inspect_headers`, without percent decoding |
-| Body    | The original UTF-8 text, with structured parsing introduced in later stages       |
+Case and look-alike letters cause the same problem. HTML tags and SQL keywords ignore case, so `<SCRIPT>` works like `<script>`. Some applications also treat full-width letters, the wide forms used in Chinese and Japanese text, like `＜ＳＣＲＩＰＴ`, the same as ordinary ones.
 
-With normalization enabled, query parameters are separated by `&`, and the first
-`=` separates a name from its value. A parameter without `=` has an empty value.
-Its name is validated but not inspected. Preserve repeated values as independent
-inputs.
+The fix is to check what the application will see, not the raw request. When the policy has `"normalization": true`, your firewall builds its inputs in two steps: it decodes them, then puts them into one standard form. It still forwards the original request, not this copy.
 
-Malformed encodings have no reliable decoded inspection view. Validate percent
-escapes and decoded UTF-8 in the path even when normalization is disabled.
-When normalization is enabled, also validate query names and
-values, but do not inspect query names. An invalid path or query escape or
-invalid decoded UTF-8 returns HTTP `400`, JSON `error.rule: "invalid_request"`,
-before the origin is contacted. The Notes section covers malformed paths
-rejected by the HTTP server itself.
+### Decoding the Inputs
 
-Inspect each occurrence of a configured header as a separate input. Do not split
-a header value on commas.
+With normalization on, your firewall checks these inputs instead of the raw target:
 
-NFKC combines compatibility forms such as full-width letters. Case folding
-handles caseless matching, including `Straße` -> `strasse`. For every inspection
-input, apply **Unicode NFKC normalization, then case folding**. Policy terms are
-already in this canonical form.
+- the path, percent-decoded
+- each query parameter's value, with each `+` turned into a space, then percent-decoded
+- each header the policy's `inspect_headers` list names, like `"inspect_headers": ["X-Search"]`, as it arrived
+- the body text, as before
 
-### Expected behavior
+Percent-decoding turns each `%XX` into one byte, and the bytes are then read as UTF-8. So `/search?q=caf%C3%A9&lang=en` gives the inputs `/search`, `café` and `en`, plus the body. To find the values, split the query on `&`, then split each parameter at its first `=`. A parameter without `=` has an empty value. Only the values are checked, not the names.
 
-Match rules against each resulting string independently. Keep the block/log
-responses from earlier stages, first-rule precedence, and request-local
-diagnostics. Neither normalization nor inspection may change a forwarded path,
-query, header, or body.
+Decode each input exactly once, because that's what the origin does. `%253C` decodes to `%3C`, not `<`.
 
-Without `normalization`, retain the raw-target/body behavior from earlier stages
-and ignore `inspect_headers`. Header names are case-insensitive. Decoding is
-exactly one layer. It does not repeatedly unwrap an input until a rule matches.
+Keep the inputs separate when matching. Joining them could invent a match, like `union` in one parameter and ` select` in the next.
 
-### Examples
+Without `normalization` in the policy, keep checking the raw target and body, as in earlier stages.
 
-With the policy above:
+### Unicode Normalization
 
-| Request input              | Inspected value | Result       |
-| -------------------------- | --------------- | ------------ |
-| Query `q=%3Cscript%3E`     | `<script>`      | `xss-script` |
-| Query `q=%253Cscript%253E` | `%3cscript%3e`  | No match     |
-| `X-Search: ＜ＳＣＲＩＰＴ` | `<script`       | `xss-script` |
-| Query `q=tea+cup`          | `tea cup`       | No match     |
+Next, put every input, including the body, into one standard form, in two steps:
 
-In log mode, even a matching encoded request must reach the origin with its
-original bytes.
+1. [NFKC normalization](https://en.wikipedia.org/wiki/Unicode_equivalence) turns look-alike forms into plain characters. Full-width `＜ＳＣＲＩＰＴ` becomes `<SCRIPT`.
+2. Case folding is a stronger kind of lowercasing, made for comparing text. `<SCRIPT` becomes `<script`, and `Straße` becomes `strasse`.
+
+The policy's terms are already in this form, like `<script` and `union select`. Then match the rules against the inputs as before.
+
+### Invalid Encodings
+
+Some percent escapes can't be decoded: a `%` that isn't followed by two hex digits, like `%ZZ`, or decoded bytes that aren't valid UTF-8, like `%FF`. Your firewall can't know what the origin would make of them. So before matching any rules, it checks that the path, and the name and value of every query parameter, decode cleanly.
+
+If one doesn't, your firewall rejects the request without contacting the origin. It responds `400 Bad Request` with `{"error": {"rule": "invalid_request"}}`, `Content-Type: application/json` and `X-WAF-Match: invalid_request`.
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
+The tester will write a policy file and execute your program like this:
 
 ```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
+$ ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-Run the exercise with:
+`--detector` is for later stages. With normalization on and the rule `{"id": "sql-union", "term": "union select"}`, the tester will send:
 
 ```bash
-codecrafters test
+$ curl -i 'http://127.0.0.1:8080/search?q=union+select+password+from+users'
 ```
 
-The search route decodes query values once and treats `+` as a space. It
-simulates a leaked private row when the decoded query contains `union select`.
-No SQL database or query is executed.
+The tester's output first shows the origin's own response, which leaks a row with `DUMMY_PRIVATE_HASH`. Your firewall should block the request with `403`, `X-WAF-Match: sql-union` and `{"error": {"rule": "sql-union"}}`. A product search, `GET /search?q=tea+cup`, should still return the origin's results.
 
-With normalization and the canonical `union select` denylist term enabled, the
-tester sends:
+It will also send values encoded twice, full-width letters in a header, mixed-case and non-English text, terms split across parameters, invalid encodings, and requests in `log` mode.
 
-```bash
-curl --include 'http://127.0.0.1:8080/search?q=union+select+password+from+users'
-```
+The tester will verify that:
 
-The output first shows the direct application's HTTP `200` response:
-
-```json
-{
-  "results": [
-    { "item": "tea cup" },
-    { "password_hash": "DUMMY_PRIVATE_HASH", "user": "admin" }
-  ]
-}
-```
-
-The raw-target rule from earlier stages misses `union+select`. Your normalized
-inspection view must find `union select`, return HTTP `403` with
-`X-WAF-Match: sql-union`, and prevent forwarding:
-
-```json
-{ "error": { "rule": "sql-union" } }
-```
-
-The tester then requests `q=tea+cup`. It must still return HTTP `200` with
-`{"results":[{"item":"tea cup"}]}`. Other cases check one-layer decoding,
-Unicode normalization and case folding, independent inputs, ignored query names,
-invalid encodings, and unchanged log-mode traffic.
+- Each input is decoded once, normalized, and checked on its own
+- Query parameter names aren't checked
+- Invalid encodings get the `400` error and never reach the origin
+- The origin receives the original request, not the decoded copy, even when a rule matches in `log` mode
 
 ### Notes
 
-- A malformed path escape may be rejected by the HTTP server before your handler
-  runs. It must return HTTP `400`, but its body is not prescribed.
-
-- JSON escapes and form-encoded bodies are handled in later stages. This stage
-  does not inspect query names or arbitrary headers. Unlisted representations
-  can still evade a rule.
-- Read more about [Unicode normalization](https://www.unicode.org/reports/tr15/)
-  and
-  [URL encoding](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).
+- Some HTTP servers reject a path like `/search%ZZ` before your code runs. The tester only checks for a `400` there, since your firewall can't add its JSON error.
+{{#lang_is_go}}
+- The starter's `go.mod` includes `golang.org/x/text`. Use `norm.NFKC.String` from `golang.org/x/text/unicode/norm`, and `cases.Fold().String` from `golang.org/x/text/cases`. `strings.ToLower` doesn't turn `ß` into `ss`.
+- `url.QueryUnescape` returns an error for `%ZZ`, but not for invalid UTF-8 like `%FF`, so also check the result with `utf8.ValidString`.
+{{/lang_is_go}}
+{{#lang_is_python}}
+- `urllib.parse.unquote` leaves `%ZZ` as it is and quietly replaces invalid UTF-8. So check the escapes yourself, then decode with `unquote_to_bytes(text).decode("utf-8")`, which raises on invalid UTF-8. For normalizing, use `unicodedata.normalize("NFKC", text)` and `text.casefold()`.
+- `http.server` reads header values as Latin-1, so turn each one back into UTF-8 with `value.encode("latin-1").decode("utf-8")`.
+{{/lang_is_python}}
