@@ -1,4 +1,4 @@
-@@ -1,36 +1,31 @@
+@@ -1,41 +1,36 @@
  package main
 
  import (
@@ -21,27 +21,36 @@
 -	// You can use print statements as follows for debugging, they'll be visible when running tests.
 -	fmt.Fprintf(os.Stderr, "Logs from your program will appear here!\n")
 -
+ 	// A direct handler avoids ServeMux path redirects in later proxy stages.
 -	// TODO: Uncomment the code below to pass the first stage!
 -	//
--	// http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+-	// handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-	// 	if r.URL.Path != "/health" {
+-	// 		http.NotFound(w, r)
+-	// 		return
+-	// 	}
 -	// 	if r.Method != http.MethodGet {
 -	// 		w.WriteHeader(http.StatusMethodNotAllowed)
 -	// 		return
 -	// 	}
 -	// 	w.WriteHeader(http.StatusOK)
 -	// })
--	// if err := http.ListenAndServe(":8080", nil); err != nil {
+-	// if err := http.ListenAndServe(":8080", handler); err != nil {
 -	// 	fmt.Fprintln(os.Stderr, err)
 -	// 	os.Exit(1)
 -	// }
-+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
++	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		if r.URL.Path != "/health" {
++			http.NotFound(w, r)
++			return
++		}
 +		if r.Method != http.MethodGet {
 +			w.WriteHeader(http.StatusMethodNotAllowed)
 +			return
 +		}
 +		w.WriteHeader(http.StatusOK)
 +	})
-+	if err := http.ListenAndServe(":8080", nil); err != nil {
++	if err := http.ListenAndServe(":8080", handler); err != nil {
 +		fmt.Fprintln(os.Stderr, err)
 +		os.Exit(1)
 +	}

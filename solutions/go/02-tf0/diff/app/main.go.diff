@@ -1,4 +1,4 @@
-@@ -1,31 +1,94 @@
+@@ -1,36 +1,94 @@
  package main
 
  import (
@@ -18,7 +18,8 @@
 +var hop = map[string]bool{"Connection": true, "Keep-Alive": true, "Proxy-Authenticate": true,
 +	"Proxy-Authorization": true, "Te": true, "Trailer": true, "Transfer-Encoding": true,
 +	"Upgrade": true, "Content-Length": true}
-+
+
+-// Usage: your_program.sh --origin <url> --detector <url> --policy <path>
 +func copyHeaders(destination, source http.Header) {
 +	excluded := map[string]bool{}
 +	for _, name := range strings.Split(strings.Join(source.Values("Connection"), ","), ",") {
@@ -42,8 +43,7 @@
 +	w.WriteHeader(status)
 +	json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"rule": rule}})
 +}
-
--// Usage: your_program.sh --origin <url> --detector <url> --policy <path>
++
  func main() {
 -	flag.String("origin", "", "Origin web application URL")
 -	flag.String("detector", "", "ML detector URL")
@@ -53,27 +53,29 @@
 +	policyPath := flag.String("policy", "", "Trusted policy JSON file")
  	flag.Parse()
 -
--	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
--		if r.Method != http.MethodGet {
--			w.WriteHeader(http.StatusMethodNotAllowed)
+-	// A direct handler avoids ServeMux path redirects in later proxy stages.
 +	_ = detector
 +	_ = policyPath
 +	client := &http.Client{Timeout: 3 * time.Second,
 +		Transport:     &http.Transport{DisableCompression: true},
 +		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
-+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-		if r.URL.Path != "/health" {
+-			http.NotFound(w, r)
 +		if r.Method == "GET" && r.URL.RequestURI() == "/health" {
 +			w.WriteHeader(200)
  			return
  		}
--		w.WriteHeader(http.StatusOK)
+-		if r.Method != http.MethodGet {
+-			w.WriteHeader(http.StatusMethodNotAllowed)
 +		diagnostics := http.Header{}
 +		var reader io.Reader = r.Body
 +		body, err := io.ReadAll(reader)
 +		if err != nil {
 +			reject(w, 400, "invalid_request", diagnostics)
-+			return
-+		}
+ 			return
+ 		}
+-		w.WriteHeader(http.StatusOK)
 +		request, err := http.NewRequestWithContext(r.Context(), r.Method, strings.TrimRight(*origin, "/")+r.URL.RequestURI(), bytes.NewReader(body))
 +		if err != nil {
 +			reject(w, 502, "origin_unavailable", diagnostics)
@@ -99,7 +101,7 @@
 +		w.WriteHeader(response.StatusCode)
 +		w.Write(content)
  	})
--	if err := http.ListenAndServe(":8080", nil); err != nil {
+-	if err := http.ListenAndServe(":8080", handler); err != nil {
 -		fmt.Fprintln(os.Stderr, err)
 +	server := &http.Server{Addr: "127.0.0.1:8080", Handler: handler}
 +	if err := server.ListenAndServe(); err != nil {

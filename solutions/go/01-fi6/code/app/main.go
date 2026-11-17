@@ -17,14 +17,19 @@ func main() {
 	flag.String("policy", "", "Policy JSON file path")
 	flag.Parse()
 
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	// A direct handler avoids ServeMux path redirects in later proxy stages.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/health" {
+			http.NotFound(w, r)
+			return
+		}
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(":8080", handler); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
