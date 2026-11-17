@@ -35,7 +35,7 @@ Add an optional `decisions` object:
 }
 ```
 
-Exact matching confines route tuning to its intended endpoint; decoding ensures
+Exact matching confines route tuning to its intended endpoint. Decoding ensures
 an encoded spelling such as `/articl%65s` selects the same policy as `/articles`.
 Use the first route whose `path` exactly matches the once-percent-decoded
 request path, case-sensitively, without NFKC normalization or case folding. This

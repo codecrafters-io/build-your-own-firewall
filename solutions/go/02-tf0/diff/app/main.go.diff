@@ -18,8 +18,7 @@
 +var hop = map[string]bool{"Connection": true, "Keep-Alive": true, "Proxy-Authenticate": true,
 +	"Proxy-Authorization": true, "Te": true, "Trailer": true, "Transfer-Encoding": true,
 +	"Upgrade": true, "Content-Length": true}
-
--// Usage: your_program.sh --origin <url> --detector <url> --policy <path>
++
 +func copyHeaders(destination, source http.Header) {
 +	excluded := map[string]bool{}
 +	for _, name := range strings.Split(strings.Join(source.Values("Connection"), ","), ",") {
@@ -43,7 +42,8 @@
 +	w.WriteHeader(status)
 +	json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"rule": rule}})
 +}
-+
+
+-// Usage: your_program.sh --origin <url> --detector <url> --policy <path>
  func main() {
 -	flag.String("origin", "", "Origin web application URL")
 -	flag.String("detector", "", "ML detector URL")

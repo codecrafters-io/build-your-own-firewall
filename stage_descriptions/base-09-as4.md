@@ -10,7 +10,7 @@ later denial cannot arrive after the protected bytes have escaped.
 
 ### Policy
 
-Buffering needs a memory bound; releasing an inspected prefix would leave the
+Buffering needs a memory bound. Releasing an inspected prefix would leave the
 unchecked remainder free to expose a secret. The policy sets a body size limit
 and the patterns to withhold.
 

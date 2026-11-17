@@ -31,8 +31,8 @@ it inside the firewall would hide the application's original response. Relay
 origin HTTP errors and redirects as responses. Do not follow a redirect.
 
 Once you send the origin's status or body, you cannot replace it if the connection
-fails midway. Buffering lets you return an error instead of a partial response;
-later, it will also let you check responses for secrets.
+fails midway. Buffering lets you return an error instead of a partial response.
+Later, it will also let you check responses for secrets.
 
 Read the complete origin response body before sending its status, headers, or
 body to the client. If the origin connection fails or its response cannot be
@@ -65,8 +65,9 @@ names, names listed in `Connection`, and the `X-WAF-` prefix case-insensitively:
   rather than copying it, and let your HTTP library supply valid framing.
 - Only your firewall should report its decisions. An origin-supplied
   `X-WAF-Match: xss-script` could falsely label a clean request. Remove headers
-  beginning with `X-WAF-` in both directions; later stages add your own
-  diagnostics after cleanup.
+  beginning with `X-WAF-` in both directions. After cleanup, add your own
+  diagnostics, such as `X-WAF-Match: origin_unavailable`. Later stages introduce
+  additional diagnostics.
 
 Preserve all remaining application headers.
 
@@ -117,7 +118,9 @@ Expect HTTP `200` and:
 { "article": "My first article", "published": true }
 ```
 
-The tester verifies that the application receives each request unchanged.
+The tester verifies that methods, paths, queries, and body bytes reach the
+application unchanged. Forwarded headers must follow the adjustment and removal
+rules above.
 Additional protocol cases check all five methods, exact request bytes and
 headers, error and redirect responses, and connection/reserved-header removal.
 Incomplete responses and an unavailable origin must produce the specified `502`

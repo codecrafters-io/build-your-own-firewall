@@ -43,9 +43,12 @@ or decode percent escapes yet. Read rule IDs and terms from policy.
 
 ### Expected decisions
 
-Callers need to know which rule acted without receiving reflected attack content
-or private request data. Use a rule ID in the response, and keep diagnostics
-local to each request so a previous match cannot mislead the next caller.
+Callers need to know why the firewall acted without receiving reflected attack
+content or private request data. Use a rule ID for denylist matches, and keep
+diagnostics local to each request so a previous match cannot mislead the next caller.
+
+The table describes denylist decisions. Firewall-generated errors use the
+diagnostics described below.
 
 | Situation             | Client result                                                  | Origin receives request? |
 | --------------------- | -------------------------------------------------------------- | ------------------------ |
@@ -62,9 +65,11 @@ For a block, send `Content-Type: application/json` and this shape:
 { "error": { "rule": "xss-script" } }
 ```
 
-Every error your firewall generates, including `origin_unavailable` and the
-errors added in later stages, uses this shape and an `X-WAF-Match` header naming
-its rule. The error must not echo request content. Match headers describe only
+Every error your firewall generates uses this shape. Set both `error.rule` and
+`X-WAF-Match` to its error identifier, such as `origin_unavailable`, even when no
+denylist rule matched. These error responses replace the table's origin-relay
+result when forwarding fails. Errors added in later stages follow the same
+convention. The error must not echo request content. Match headers describe only
 the current request. A later clean request must not inherit an earlier match.
 
 ### Tests

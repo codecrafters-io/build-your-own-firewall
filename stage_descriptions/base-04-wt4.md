@@ -11,7 +11,7 @@ component applies compatibility normalization and case folding.
 
 An _inspection view_ is a transformed copy used for matching. Keep original bytes
 for forwarding: rewriting an allowed request can change its meaning or break a
-signature over its contents. This course uses a fixed pipeline; in production,
+signature over its contents. This course uses a fixed pipeline. In production,
 it must account for how the protected application actually interprets inputs.
 
 ### The inspection view

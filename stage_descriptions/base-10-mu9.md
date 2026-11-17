@@ -41,7 +41,7 @@ does not.
 
 This patch enforces a known application constraint, so log mode and detector
 outages must not suspend it. Rejecting an invalid export gives the caller a clear
-failure; silently deleting fields would execute a different request.
+failure. Silently deleting fields would execute a different request.
 
 For a matching route, the body must be one valid JSON object with the configured
 top-level argument. That argument must be a nonempty array consisting entirely
