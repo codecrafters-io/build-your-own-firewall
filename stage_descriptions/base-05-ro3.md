@@ -2,15 +2,33 @@ In this stage, you'll combine weighted attack signals into one request score.
 
 ### Why combine weak signals?
 
-A single suspicious fragment can appear in legitimate traffic: `--` occurs in
-command-line examples, and `or 1=1` may appear in programming discussions. In a
-vulnerable SQL query, however, an injected `OR 1=1` can make a condition always
-true, while `--` can comment out the remaining SQL.
+In a vulnerable SQL query, `OR 1=1` can make a condition always true, while `--`
+can comment out the remaining SQL. Either fragment can also appear in legitimate
+discussions. **Anomaly scoring** combines their weights: `3 + 2 = 5` reaches the
+policy's threshold. The score measures matched signals, not attack probability.
 
-Anomaly scoring lets these signals contribute weights toward a request total.
-With the policy below, their weights combine as `3 + 2 = 5`, reaching the
-enforcement threshold. This score measures matched signals, not attack
-probability.
+### Stop a private-row leak
+
+With normalization and the heuristic policy below, the tester sends:
+
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
+```
+
+The application simulates a leaked private row when the decoded query combines
+`or 1=1` and `--`. Its direct response contains `DUMMY_PRIVATE_HASH`. The tester
+prints that baseline before making the same request through your firewall.
+
+Your firewall must return HTTP `403`, `X-WAF-Score: 5`,
+`X-WAF-Signals: sql-or,sql-comment` (either order), and:
+
+```json
+{ "error": { "rule": "heuristic_score" } }
+```
+
+The application must receive no forwarded attack. A clean `q=tea+cup` search
+still returns `200` with product results. These are simulated SQL-injection
+consequences, not executed SQL.
 
 ### Policy
 
@@ -52,13 +70,11 @@ If a denylist rule matches, it still supplies the decision. Otherwise, a score
 greater than or equal to `threshold` selects `heuristic_score`, using the
 existing block/log behavior. Without `heuristics`, retain earlier behavior.
 
-Diagnostics help explain decisions and tune false positives. Scores on allowed
-requests show how close legitimate traffic comes to the cutoff.
-
-With heuristics configured, report complete diagnostics on the client-facing
-response for every inspected request, including allowed requests, log-mode
-matches, and `403` blocks. Report the full score and all fired signals even when
-a denylist rule wins. Do not forward these diagnostic headers to the origin:
+Diagnostics show how close legitimate traffic comes to the cutoff. With
+heuristics configured, report them on every inspected request's client-facing
+response, including allowed requests, log-mode matches, and `403` blocks. Report
+the full score and all fired signals even when a denylist rule wins. Do not
+forward these headers to the origin:
 
 ```text
 X-WAF-Score: 5
@@ -84,50 +100,14 @@ With normalization enabled and the policy above:
 | `or 1=1` in one input, `--` in another | 5     | `heuristic_score` |
 
 A block returns HTTP `403`, `Content-Type: application/json`, the diagnostics
-above, and:
-
-```json
-{ "error": { "rule": "heuristic_score" } }
-```
+above, and the `heuristic_score` error shown in the application example.
 
 The origin must receive nothing. In log mode, the original request reaches it
 and the response reports `X-WAF-Match: heuristic_score`.
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
-
-```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
-```
-
-Run the exercise with:
-
-```bash
-codecrafters test
-```
-
-With normalization and the heuristic policy above, the tester sends:
-
-```bash
-curl --include 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
-```
-
-The application simulates a leaked private row when the decoded query combines
-`or 1=1` and `--`. Its direct response contains `DUMMY_PRIVATE_HASH`. The tester
-prints that baseline before making the same request through your firewall.
-
-Your firewall must return HTTP `403`, `X-WAF-Score: 5`, both signal IDs, and:
-
-```json
-{ "error": { "rule": "heuristic_score" } }
-```
-
-The application must receive no forwarded attack. A clean `q=tea+cup` search
-still returns `200` with product results. These are simulated SQL-injection
-consequences, not executed SQL.
+Run `codecrafters test` to exercise the search and scoring cases.
 
 Other cases check repeated signals, clean-request diagnostics, and denylist
 precedence while retaining the full heuristic score and all fired signal IDs.

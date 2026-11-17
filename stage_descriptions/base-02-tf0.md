@@ -3,97 +3,22 @@ the protected application.
 
 ### Why proxy requests first?
 
-A firewall must carry legitimate traffic correctly before enforcing security
-policy. A **reverse proxy** accepts a client's request, makes a separate request
-to the application, and returns the application's response. Your firewall will
-inspect these two directions in later stages.
+A **reverse proxy** accepts a client's request, forwards it to the application,
+and returns the response. Get legitimate traffic working before adding
+inspection.
 
 ```text
 Client -- GET /search?q=tea+cup --> Firewall --> Origin
 Client <-- 200 + response body -- Firewall <-- Origin
 ```
 
-### Expected behavior
+### Forward a search and an article
 
-Forward `GET`, `POST`, `PUT`, `PATCH`, and `DELETE` requests to `--origin`,
-keeping `/health` local. Append the original request path and query string to
-the supplied origin URL.
+The tester supplies one application with product search, article publishing,
+HTML previews, and record exports. You will protect it throughout the course;
+you only implement the firewall. All records and secrets are dummy data.
 
-| Direction | Preserve                                                                                              | Adjust                                                    |
-| --------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Request   | Method, path, query, body bytes, and end-to-end headers, including `Authorization` and `Content-Type` | The upstream `Host` must name the origin host and port.   |
-| Response  | Status, body bytes, and end-to-end headers, including `Content-Type` and `X-Request-Id`               | Framing headers must describe the body you actually send. |
-
-Preserve JSON whitespace and escaping, empty bodies, and unknown fields.
-
-A redirect is an instruction for the client to make another request. Following
-it inside the firewall would hide the application's original response. Relay
-origin HTTP errors and redirects as responses. Do not follow a redirect.
-
-Once you send the origin's status or body, you cannot replace it if the connection
-fails midway. Buffering lets you return an error instead of a partial response.
-Later, it will also let you check responses for secrets.
-
-Read the complete origin response body before sending its status, headers, or
-body to the client. If the origin connection fails or its response cannot be
-read completely, return HTTP `502` with `Content-Type: application/json`,
-`X-WAF-Match: origin_unavailable`, and this JSON body:
-
-```json
-{ "error": { "rule": "origin_unavailable" } }
-```
-
-### Header handling
-
-Your firewall has separate connections to the client and origin. **Hop-by-hop
-headers** control one connection: a client's `Connection: close` should not
-decide whether the firewall keeps its origin connection open. Application
-headers such as `Content-Type` and `Authorization` still carry meaning for the
-application.
-
-Apply these rules to both forwarded requests and origin responses. Match header
-names, names listed in `Connection`, and the `X-WAF-` prefix case-insensitively:
-
-- `Connection: X-Temporary` marks `X-Temporary` as connection-specific, even
-  though it is not in the fixed list. Remove `Connection`, `Keep-Alive`,
-  `Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailer`,
-  `Transfer-Encoding`, and `Upgrade`.
-  Also remove any header named in the comma-separated `Connection` value.
-- Framing tells the receiver where the body ends and must match the outgoing
-  message. For example, a library can decode a chunked response into body bytes
-  that no longer contain chunk markers. Remove the incoming `Content-Length`
-  rather than copying it, and let your HTTP library supply valid framing.
-- Only your firewall should report its decisions. An origin-supplied
-  `X-WAF-Match: xss-script` could falsely label a clean request. Remove headers
-  beginning with `X-WAF-` in both directions. After cleanup, add your own
-  diagnostics, such as `X-WAF-Match: origin_unavailable`. Later stages introduce
-  additional diagnostics.
-
-Preserve all remaining application headers.
-
-### Tests
-
-The application is a small customer service with product search, article
-publishing, HTML previews, and record exports. You will protect this same
-application as the course progresses. Its records and secrets are dummy data.
-The tester manages the services. You only implement the firewall.
-
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
-
-```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
-```
-
-Run the exercise with:
-
-```bash
-codecrafters test
-```
-
-The tester compares the application's direct response with its response through
-your firewall. The product-search request is equivalent to:
+The tester compares direct and proxied responses, starting with a product search:
 
 ```bash
 curl --include 'http://127.0.0.1:8080/search?q=tea+cup'
@@ -118,11 +43,69 @@ Expect HTTP `200` and:
 {"article":"My first article","published":true}
 ```
 
-The tester verifies that methods, paths, queries, and body bytes reach the
-application unchanged. Forwarded headers must follow the adjustment and removal
-rules above.
-Additional protocol cases check all five methods, exact request bytes and
-headers, error and redirect responses, and connection/reserved-header removal.
+### Expected behavior
+
+Forward `GET`, `POST`, `PUT`, `PATCH`, and `DELETE` requests to `--origin`,
+keeping `/health` local. Append the original request path and query string to
+the supplied origin URL.
+
+| Direction | Preserve                                                                                              | Adjust                                                    |
+| --------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Request   | Method, path, query, body bytes, and end-to-end headers, including `Authorization` and `Content-Type` | The upstream `Host` must name the origin host and port.   |
+| Response  | Status, body bytes, and end-to-end headers, including `Content-Type` and `X-Request-Id`               | Framing headers must describe the body you actually send. |
+
+Preserve JSON whitespace and escaping, empty bodies, and unknown fields.
+
+Relay origin HTTP error and redirect responses. A redirect instructs the
+client to make another request; do not follow it inside the firewall.
+
+Buffering lets you replace a failed response before any origin content escapes.
+Later, it will also let you check responses for secrets.
+
+Read the complete origin response body before sending its status, headers, or
+body to the client. If the origin connection fails or its response cannot be
+read completely, return HTTP `502` with `Content-Type: application/json`,
+`X-WAF-Match: origin_unavailable`, and this JSON body:
+
+```json
+{ "error": { "rule": "origin_unavailable" } }
+```
+
+### Header handling
+
+**Hop-by-hop headers** control one connection. A client's `Connection: close`
+should not control the firewall's separate origin connection. Application
+headers such as `Content-Type` still carry meaning across both connections.
+
+Apply these rules to both forwarded requests and origin responses. Match header
+names, names listed in `Connection`, and the `X-WAF-` prefix case-insensitively:
+
+- `Connection: X-Temporary` marks `X-Temporary` as connection-specific, even
+  though it is not in the fixed list. Remove `Connection`, `Keep-Alive`,
+  `Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailer`,
+  `Transfer-Encoding`, and `Upgrade`.
+  Also remove any header named in the comma-separated `Connection` value.
+- Framing tells the receiver where the body ends. A library may remove chunk
+  markers when decoding a response. Remove the incoming `Content-Length` and
+  let your HTTP library supply framing that matches the outgoing body.
+- Only your firewall should report its decisions. An origin-supplied
+  `X-WAF-Match: xss-script` could falsely label a clean request. Remove headers
+  beginning with `X-WAF-` in both directions. After cleanup, add your own
+  diagnostics, such as `X-WAF-Match: origin_unavailable`. Later stages introduce
+  additional diagnostics.
+
+Preserve all remaining application headers.
+
+### Tests
+
+Run `codecrafters test` to exercise the examples and protocol cases.
+
+For this and later stages, the tester starts the application and detector,
+writes the trusted policy, and launches your firewall using the Stage 1 flags.
+Service addresses and the absolute policy path vary between runs.
+
+Additional cases check all five methods, exact request bytes and headers,
+error and redirect responses, and connection/reserved-header removal.
 Incomplete responses and an unavailable origin must produce the specified `502`
 without releasing origin content. An origin `400` must remain `400`.
 

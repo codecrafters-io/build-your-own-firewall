@@ -3,17 +3,43 @@ mode.
 
 ### Why block before forwarding?
 
-If an application inserts user input into an HTML page without escaping it, the
-browser may treat that input as code. An attacker could exploit this by
-submitting a `<script>` tag that runs JavaScript in another user's browser.
-This is called Cross-Site Scripting (XSS). Blocking recognizable patterns before
-they reach the application can catch some attempts without changing its code.
-The application still needs to escape user input correctly when inserting it
-into HTML.
+Unescaped user input in HTML can run code in another user's browser: a
+Cross-Site Scripting (XSS) attack. Blocking recognizable patterns can catch some
+attempts, but the application still needs to escape input correctly. Rules can
+also match legitimate discussions of HTML, so `log` mode lets you observe
+matches before enforcing them.
 
-Because literal token rules can also match benign traffic, such as a user
-discussing HTML tags in a comment, teams can evaluate new policies in `log` mode
-to observe matches on live traffic before switching to `block` mode.
+### Block an unsafe preview
+
+The preview route deliberately interpolates a submitted comment into an HTML
+document without escaping it. The tester first uses log mode with the
+`xss-script` rule and sends:
+
+```bash
+curl --include http://127.0.0.1:8080/preview \
+  -H 'Content-Type: text/plain' --data-binary '<script>alert(1)</script>'
+```
+
+The direct application and the log-mode firewall both return HTTP `200` with
+`Content-Type: text/html; charset=utf-8` and:
+
+```html
+<!doctype html><title>Preview</title><div>Preview: <script>alert(1)</script></div>
+```
+
+Your log-mode response must also carry `X-WAF-Match: xss-script`. The test
+output shows that the application received the request. A browser can execute
+the reflected script; the tester displays the HTML without executing JavaScript.
+
+The tester restarts your firewall in block mode and repeats the request. Expect
+HTTP `403`, `X-WAF-Match: xss-script`, and only:
+
+```json
+{ "error": { "rule": "xss-script" } }
+```
+
+The application must receive no request through the firewall. A clean preview
+with body `Hello` must still return `200` with `Preview: Hello` in the HTML.
 
 ### Policy and inspection inputs
 
@@ -43,12 +69,8 @@ or decode percent escapes yet. Read rule IDs and terms from policy.
 
 ### Expected decisions
 
-Callers need to know why the firewall acted without receiving reflected attack
-content or private request data. Use a rule ID for denylist matches, and keep
-diagnostics local to each request so a previous match cannot mislead the next caller.
-
-The table describes denylist decisions. Firewall-generated errors use the
-diagnostics described below.
+Report rule IDs so callers can understand decisions without receiving reflected
+attack content or private request data:
 
 | Situation             | Client result                                                  | Origin receives request? |
 | --------------------- | -------------------------------------------------------------- | ------------------------ |
@@ -59,67 +81,17 @@ diagnostics described below.
 Add `X-WAF-Match` only to the client-facing response. Do not forward it upstream
 to the origin.
 
-For a block, send `Content-Type: application/json` and this shape:
-
-```json
-{ "error": { "rule": "xss-script" } }
-```
-
-Every error your firewall generates uses this shape. Set both `error.rule` and
-`X-WAF-Match` to its error identifier, such as `origin_unavailable`, even when no
-denylist rule matched. These error responses replace the table's origin-relay
-result when forwarding fails. Errors added in later stages follow the same
-convention. The error must not echo request content. Match headers describe only
-the current request. A later clean request must not inherit an earlier match.
+Every firewall-generated error uses `Content-Type: application/json` and the
+preview example's error shape. Set both `error.rule` and `X-WAF-Match` to its
+identifier, even when no denylist matched. For example, a forwarding failure
+replaces the origin response with `origin_unavailable`. Later errors follow
+this convention. Never echo request content or let a clean request inherit an
+earlier match.
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
-
-```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
-```
-
-Run the exercise with:
-
-```bash
-codecrafters test
-```
-
-The preview route deliberately interpolates a submitted comment into an HTML
-document without escaping it. The tester first uses log mode with the
-`xss-script` rule and sends:
-
-```bash
-curl --include http://127.0.0.1:8080/preview \
-  -H 'Content-Type: text/plain' --data-binary '<script>alert(1)</script>'
-```
-
-The direct application and the log-mode firewall both return HTTP `200` with
-`Content-Type: text/html; charset=utf-8` and:
-
-```html
-<!doctype html><title>Preview</title><div>Preview: <script>alert(1)</script></div>
-```
-
-Your log-mode response must also carry `X-WAF-Match: xss-script`. The test
-output shows that the application received the request. This is a reflected-XSS
-fixture: a browser can execute the script in this HTML. The tester displays the
-response without executing JavaScript.
-
-The tester restarts your firewall in block mode and repeats the request. Expect
-HTTP `403`, `X-WAF-Match: xss-script`, and only:
-
-```json
-{ "error": { "rule": "xss-script" } }
-```
-
-The application must receive no request through the firewall. A clean preview
-with body `Hello` must still return `200` with `Preview: Hello` in the HTML.
-Other cases check rule order, case-sensitive matching, and request-local
-headers.
+Run `codecrafters test` to exercise the preview, rule order, case-sensitive
+matching, and request-local headers.
 
 ### Notes
 

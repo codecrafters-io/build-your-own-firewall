@@ -3,100 +3,14 @@ fields clients may request.
 
 ### Why patch an endpoint?
 
-The protected application's export endpoint trusts a client-provided list of
-record fields and will also return a private field such as `password_hash`. That
-request can look harmless to both detectors. A **virtual patch** enforces a rule
-for a known application flaw at the firewall while the application awaits a code
-fix. Your patch must stop the private-field export and keep public-field exports
-working.
+A **virtual patch** enforces a rule for a known application flaw at the firewall
+while the application awaits a code fix. Here, the export endpoint trusts a
+client's field list and can expose `password_hash` despite both detectors.
 
-### Patch policy
+### Stop a private-field export
 
-An allowlist names the fields known to be safe. Only forbidding `password_hash`
-would miss another private field added later. Method and path matching confine
-the patch to the operation with the known flaw.
-
-Add an optional list of `virtual_patches`:
-
-```json
-{
-  "virtual_patches": [
-    {
-      "id": "export-fields",
-      "method": "POST",
-      "path": "/api/export",
-      "argument": "fields",
-      "allowed_values": ["customer_id", "name"]
-    }
-  ]
-}
-```
-
-A patch applies only when both the HTTP method and once-decoded path match
-exactly, case-sensitively. Query parameters do not affect route matching. An
-encoded `/api/%65xport` therefore matches `/api/export`. `/api/export/extra`
-does not.
-
-### Expected behavior
-
-This patch enforces a known application constraint, so log mode and detector
-outages must not suspend it. Rejecting an invalid export gives the caller a clear
-failure. Silently deleting fields would execute a different request.
-
-For a matching route, the body must be one valid JSON object with the configured
-top-level argument. That argument must be a nonempty array consisting entirely
-of strings in `allowed_values`, compared exactly and case-sensitively.
-
-| Body                                  | Decision under the example policy |
-| ------------------------------------- | --------------------------------- |
-| `{"fields":["customer_id","name"]}`   | Allow                             |
-| `{"fields":["name","password_hash"]}` | `export-fields`                   |
-| `{"fields":[]}`                       | `export-fields`                   |
-| `{"fields":"name"}`                   | `export-fields`                   |
-| `{"fields":["Name"]}`                 | `export-fields`                   |
-
-A missing argument, malformed JSON, duplicate key, non-object body, or
-disallowed element fails the patch. Other top-level keys do not grant or remove
-permission. Every matching patch must pass. The first failing patch supplies its
-ID.
-
-Validate and run the earlier request checks first. A surviving request must then
-pass its patches **before forwarding**. On patch failure, return HTTP `403`,
-`Content-Type: application/json`, `X-WAF-Match: export-fields`, and:
-
-```json
-{ "error": { "rule": "export-fields" } }
-```
-
-- **Enforcement:** A request that fails a patch must not reach the origin.
-  Preserve earlier diagnostics. Patch enforcement remains active in log mode and
-  with the detector unavailable.
-- **Parsing and precedence:** Patch validation parses the original body bytes as
-  JSON and adds no `Content-Type` restriction of its own. It must work when
-  `inspection` is absent. When body inspection is configured, its validation
-  runs first and retains its existing failure statuses.
-- **Forwarding:** Allowed requests retain original body bytes and headers. Do
-  not remove a forbidden field and forward a modified request. Without
-  `virtual_patches`, retain earlier behavior.
-
-### Tests
-
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
-
-```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
-```
-
-Run the exercise with:
-
-```bash
-codecrafters test
-```
-
-The tester exercises the same application's export flaw with all earlier
-controls enabled. It first shows the direct private-field export, then sends:
+With all earlier controls enabled, the tester shows the direct private-field
+export, then sends:
 
 ```bash
 curl --include http://127.0.0.1:8080/api/export \
@@ -127,11 +41,79 @@ Expect HTTP `200` and:
 {"customer_id":"Customer-4829","name":"Mira"}
 ```
 
+### Patch policy
+
+An allowlist names the fields known to be safe. Only forbidding `password_hash`
+would miss another private field added later. Method and path matching confine
+the patch to the operation with the known flaw.
+
+Add an optional list of `virtual_patches`:
+
+```json
+{
+  "virtual_patches": [
+    {
+      "id": "export-fields",
+      "method": "POST",
+      "path": "/api/export",
+      "argument": "fields",
+      "allowed_values": ["customer_id", "name"]
+    }
+  ]
+}
+```
+
+A patch applies only when both the HTTP method and once-decoded path match
+exactly, case-sensitively. Query parameters do not affect route matching. An
+encoded `/api/%65xport` therefore matches `/api/export`. `/api/export/extra`
+does not.
+
+### Expected behavior
+
+Reject invalid exports rather than silently deleting fields, which would execute
+a different request.
+
+For a matching route, the body must be one valid JSON object with the configured
+top-level argument. That argument must be a nonempty array consisting entirely
+of strings in `allowed_values`, compared exactly and case-sensitively.
+
+| Body                                  | Decision under the example policy |
+| ------------------------------------- | --------------------------------- |
+| `{"fields":["customer_id","name"]}`   | Allow                             |
+| `{"fields":["name","password_hash"]}` | `export-fields`                   |
+| `{"fields":[]}`                       | `export-fields`                   |
+| `{"fields":"name"}`                   | `export-fields`                   |
+| `{"fields":["Name"]}`                 | `export-fields`                   |
+
+A missing argument, malformed JSON, duplicate key, non-object body, or
+disallowed element fails the patch. Other top-level keys do not grant or remove
+permission. Every matching patch must pass. The first failing patch supplies its
+ID.
+
+Validate and run the earlier request checks first. A surviving request must then
+pass its patches **before forwarding**. On patch failure, return HTTP `403`
+and `Content-Type: application/json`. Set `X-WAF-Match` and `error.rule` to the
+first failing patch's ID, as shown for `export-fields` above.
+
+- **Enforcement:** A request that fails a patch must not reach the origin.
+  Preserve earlier diagnostics. Patch enforcement remains active in log mode and
+  with the detector unavailable.
+- **Parsing and precedence:** Patch validation parses the original body bytes as
+  JSON and adds no `Content-Type` restriction of its own. It must work when
+  `inspection` is absent. When body inspection is configured, its validation
+  runs first and retains its existing failure statuses.
+- **Forwarding:** Allowed requests retain original body bytes and headers. Do
+  not remove a forbidden field and forward a modified request. Without
+  `virtual_patches`, retain earlier behavior.
+
+### Tests
+
+Run `codecrafters test` to exercise the exports and final replay.
+
 The same test run replays the earlier controls against the application and
 prints requests, direct application responses, firewall responses, diagnostic
-scores, and origin request counts. Each request must pass checks for its status,
-body, diagnostic headers, and whether it reached the origin. The summary comes
-from those per-request checks. Under the supplied policy, it is:
+scores, and origin request counts. The summary below comes from checking each
+request's status, body, diagnostics, and whether it reached the origin:
 
 ```text
 Replay totals: blocked requests=5, withheld responses=1, unblocked probes=1, preserved legitimate=4, false positives=1
@@ -142,8 +124,7 @@ return HTTP `200` with product results under the combined policy. Blocking it
 fails the stage. This probe executes no SQL. The false positive is a legitimate
 article containing the hard signature `union select`. Route score tuning cannot
 override that rule. The other article, clean preview, product search, and public
-export remain allowed. Passing verifies the specified policy, including its
-visible limitations. It does not mean every example becomes green.
+export remain allowed. Passing verifies this policy, including its limitations.
 
 Additional cases check encoded paths, policy-defined routes and arguments,
 invalid field arrays, duplicate keys, log mode, and detector outage, followed by

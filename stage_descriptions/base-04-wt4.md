@@ -3,16 +3,47 @@ changing forwarded traffic.
 
 ### Why normalize only the inspection view?
 
-If a firewall inspects raw request bytes while the protected application decodes
-or transforms its inputs, payloads can slip past literal rules. For example, a
-rule looking for `<script` will miss `%3Cscript` in a query string that the web
-framework percent-decodes, or full-width `＜ＳＣＲＩＰＴ` if a downstream
-component applies compatibility normalization and case folding.
+An application may decode inputs that raw-byte rules miss. An _inspection view_
+is a transformed copy used for matching. Forward the original bytes: rewriting
+them can change a request's meaning or break a signature. This course uses a
+fixed pipeline; production inspection must reflect the application's actual
+input handling.
 
-An _inspection view_ is a transformed copy used for matching. Keep original bytes
-for forwarding: rewriting an allowed request can change its meaning or break a
-signature over its contents. This course uses a fixed pipeline. In production,
-it must account for how the protected application actually interprets inputs.
+### Catch an encoded search
+
+The search route decodes query values once and treats `+` as a space. It
+simulates a leaked private row when the decoded query contains `union select`.
+No SQL database or query is executed.
+
+The tester first sends the attack directly to an example origin:
+
+```bash
+curl --include 'http://127.0.0.1:8081/search?q=union+select+password+from+users'
+```
+
+This direct request returns HTTP `200` with:
+
+```json
+{"results":[{"item":"tea cup"},{"password_hash":"DUMMY_PRIVATE_HASH","user":"admin"}]}
+```
+
+It then sends the same attack through your firewall with normalization and the
+canonical `union select` denylist term enabled:
+
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=union+select+password+from+users'
+```
+
+The raw-target rule from earlier stages misses `union+select`. Your normalized
+inspection view must find `union select`, return HTTP `403` with
+`X-WAF-Match: sql-union`, and prevent forwarding:
+
+```json
+{ "error": { "rule": "sql-union" } }
+```
+
+The tester then requests `q=tea+cup`. It must still return HTTP `200` with
+`{"results":[{"item":"tea cup"}]}`.
 
 ### The inspection view
 
@@ -110,57 +141,11 @@ described above and check decoding errors for both names and values. See the
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
+Run `codecrafters test` to exercise the search and encoding cases.
 
-```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
-```
-
-Run the exercise with:
-
-```bash
-codecrafters test
-```
-
-The search route decodes query values once and treats `+` as a space. It
-simulates a leaked private row when the decoded query contains `union select`.
-No SQL database or query is executed.
-
-The tester first sends the attack directly to the application. With the example
-origin address above, this is equivalent to:
-
-```bash
-curl --include 'http://127.0.0.1:8081/search?q=union+select+password+from+users'
-```
-
-This direct request returns HTTP `200` with:
-
-```json
-{"results":[{"item":"tea cup"},{"password_hash":"DUMMY_PRIVATE_HASH","user":"admin"}]}
-```
-
-It then sends the same attack through your firewall with normalization and the
-canonical `union select` denylist term enabled:
-
-```bash
-curl --include 'http://127.0.0.1:8080/search?q=union+select+password+from+users'
-```
-
-The raw-target rule from earlier stages misses `union+select`. Your normalized
-inspection view must find `union select`, return HTTP `403` with
-`X-WAF-Match: sql-union`, and prevent forwarding:
-
-```json
-{ "error": { "rule": "sql-union" } }
-```
-
-The tester then requests `q=tea+cup`. It must still return HTTP `200` with
-`{"results":[{"item":"tea cup"}]}`. Other cases check one-layer decoding,
-Unicode normalization and case folding, independent inputs, bare query
-parameters, ignored names in `name=value` pairs, invalid encodings, and unchanged
-log-mode traffic.
+Other cases check one-layer decoding, Unicode normalization and case folding,
+independent inputs, bare query parameters, ignored names in `name=value` pairs,
+invalid encodings, and unchanged log-mode traffic.
 
 ### Notes
 

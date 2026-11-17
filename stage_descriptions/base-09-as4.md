@@ -3,16 +3,40 @@ exceed the inspection limit.
 
 ### Why inspect responses before release?
 
-A clean-looking request can trigger an application error containing an internal
-secret. Request rules cannot catch a value that appears only in the response.
-Inspect the complete response before releasing its status, headers, or body so a
-later denial cannot arrive after the protected bytes have escaped.
+A clean-looking request can trigger a response containing an internal secret.
+Request rules cannot catch a value that appears only in the response. Inspect
+it before releasing any origin status, headers, or body.
+
+### Withhold a debug response
+
+The application's `/debug` route returns HTTP `500` with a dummy internal key.
+The tester prints that direct response, then sends the same request through your
+firewall with the response policy below:
+
+```bash
+curl --include http://127.0.0.1:8080/debug
+```
+
+The direct body is:
+
+```json
+{"debug":"INTERNAL_KEY_7F2A"}
+```
+
+The client must receive HTTP `403`, `X-WAF-Match: response_leak`, and only:
+
+```json
+{ "error": { "rule": "response_leak" } }
+```
+
+Neither the key nor the origin `X-Request-Id` may escape. The output confirms
+that one request reached the application. A clean product search must still
+return `200` with product results.
 
 ### Policy
 
-Buffering needs a memory bound. Releasing an inspected prefix would leave the
-unchecked remainder free to expose a secret. The policy sets a body size limit
-and the patterns to withhold.
+Bound buffering by bytes. Releasing an inspected prefix could expose a secret
+in the unchecked remainder.
 
 Add an optional `response` object:
 
@@ -40,16 +64,13 @@ sending anything to the client.
 | A deny pattern matches   | HTTP `403`, `error.rule: "response_leak"`                |
 | Neither condition        | Original status, exact body bytes, and preserved headers |
 
-JSON escapes can hide a secret from raw-text matching, and either a key or a
-value can leak it. Search decoded strings as well as raw text, which also covers
-HTML error pages and malformed JSON.
-
 Size takes precedence over pattern inspection. Search the body decoded as UTF-8,
 replacing invalid byte sequences for inspection only. When the body is valid
 JSON, also search each decoded string, including object keys, at every nesting
-depth and across duplicate-key values. Nonstandard constants such as `NaN` and
-`Infinity` make the body invalid JSON. Raw-text inspection is still required in
-that case. You may also inspect strings decoded by a lenient JSON parser.
+depth and across duplicate-key values: JSON escapes can hide a secret from
+raw-text matching. Nonstandard constants such as `NaN` and `Infinity` make the
+body invalid JSON. Raw-text inspection is still required in that case. You may
+also inspect strings decoded by a lenient JSON parser.
 Malformed or non-JSON bodies also use raw-text inspection rather than a
 JSON-validation denial. Do not join separate strings or normalize,
 percent-decode, or base64-decode response content. An allowed response retains
@@ -91,44 +112,7 @@ fails. See the [`encoding/json` documentation](https://pkg.go.dev/encoding/json)
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
-
-```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
-```
-
-Run the exercise with:
-
-```bash
-codecrafters test
-```
-
-The application's `/debug` route returns HTTP `500` with a dummy internal key.
-The tester prints that direct response, then sends the same request through your
-firewall with the response policy above:
-
-```bash
-curl --include http://127.0.0.1:8080/debug
-```
-
-The direct body is:
-
-```json
-{"debug":"INTERNAL_KEY_7F2A"}
-```
-
-The client must receive HTTP `403`, `X-WAF-Match: response_leak`, and only:
-
-```json
-{ "error": { "rule": "response_leak" } }
-```
-
-Neither the key nor the origin `X-Request-Id` may escape. The output confirms
-that one request reached the application: response inspection withholds the
-result of processing rather than preventing that processing. A clean product
-search must still return `200` with product results.
+Run `codecrafters test` to exercise the debug response and inspection boundaries.
 
 Other cases check escaped JSON values and keys, duplicate-key values, raw-text
 fallback for nonstandard JSON constants, invalid UTF-8 inspection, size limits,

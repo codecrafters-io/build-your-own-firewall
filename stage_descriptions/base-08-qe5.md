@@ -3,16 +3,37 @@ limit.
 
 ### Why parse request bodies?
 
-An application parses a JSON string such as `"\u003cscript"` as `<script`, while
-a raw-text rule sees only escape characters. Forms have their own encoding too.
-Inspect the values the application receives, and reject bodies you cannot fully
-inspect instead of silently forwarding an unchecked remainder.
+Applications decode JSON escapes and form values before using them. Inspect
+those decoded values, and reject bodies you cannot fully inspect.
+
+### Catch a JSON-escaped script
+
+The preview route also accepts JSON and form comments. It parses the comment
+before inserting it into HTML. The exercise uses a `4096`-byte inspection limit
+and the earlier detection policies. The tester sends a JSON-escaped script:
+
+```bash
+curl --include http://127.0.0.1:8080/preview \
+  -H 'Content-Type: application/json' \
+  --data-binary '{"comment":"\u003c\u0073\u0063\u0072\u0069\u0070\u0074\u003e\u0061\u006c\u0065\u0072\u0074\u0028\u0031\u0029\u003c\u002f\u0073\u0063\u0072\u0069\u0070\u0074\u003e"}'
+```
+
+The direct application's HTML contains `<script>alert(1)</script>`. The raw
+text scores `26` under the supplied model and misses the literal denylist.
+Parsing JSON exposes the script to `xss-script`. Return HTTP `403` with that
+match and no forwarded request:
+
+```json
+{ "error": { "rule": "xss-script" } }
+```
+
+A JSON body `{"comment":"Hello"}` must still return `200` with `Preview: Hello`
+in the application's HTML. Its original JSON bytes must reach the application.
 
 ### Policy and supported bodies
 
-Buffering needs a byte limit to bound memory use, including multibyte characters.
-Inspecting a prefix and forwarding the rest would let an attack hide beyond the
-checked portion. One extra byte distinguishes a body at the limit from one over it.
+Bound buffering by bytes to limit memory use. Inspecting only a prefix could
+miss an attack in the unchecked remainder.
 
 Add this optional field:
 
@@ -41,9 +62,9 @@ then apply the earlier normalization to every inspection string when enabled.
 
 ### Expected failures and forwarding
 
-Malformed or unsupported bodies have no complete inspection result, even in log
-mode. Duplicate JSON keys are also ambiguous: the firewall and application could
-choose different values. Reject these cases before detection or forwarding:
+Reject these cases before detection or forwarding, even in log mode. Duplicate
+JSON keys are ambiguous because the firewall and application could choose
+different values:
 
 | Body condition                                                                                                                     | Status | `error.rule`       |
 | ---------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------ |
@@ -96,42 +117,7 @@ garbage is rejected, while trailing whitespace remains allowed.
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
-
-```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
-```
-
-Run the exercise with:
-
-```bash
-codecrafters test
-```
-
-The preview route also accepts JSON and form comments. It parses the comment
-before inserting it into HTML. The exercise uses a `4096`-byte inspection limit
-and the earlier detection policies. The tester sends a JSON-escaped script:
-
-```bash
-curl --include http://127.0.0.1:8080/preview \
-  -H 'Content-Type: application/json' \
-  --data-binary '{"comment":"\u003c\u0073\u0063\u0072\u0069\u0070\u0074\u003e\u0061\u006c\u0065\u0072\u0074\u0028\u0031\u0029\u003c\u002f\u0073\u0063\u0072\u0069\u0070\u0074\u003e"}'
-```
-
-The direct application's HTML contains `<script>alert(1)</script>`. Before body
-parsing, the escaped raw text scores `26` under the supplied model and misses
-the literal denylist. After JSON parsing, your inspection view must expose the
-script to the `xss-script` rule. Return HTTP `403` with that match and no
-forwarded request:
-
-```json
-{ "error": { "rule": "xss-script" } }
-```
-
-A JSON body `{"comment":"Hello"}` must still return `200` with `Preview: Hello`
-in the application's HTML. Its original JSON bytes must reach the application.
+Run `codecrafters test` to exercise the preview and body-validation cases.
 
 Other cases use smaller policy limits to check inclusive byte boundaries, form
 decoding, exact detector inputs, unchanged clean JSON, invalid bodies, empty

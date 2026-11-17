@@ -3,11 +3,34 @@ application route.
 
 ### Why tune decisions by route?
 
-A detector can flag a legitimate security article because it contains attack
-examples. Blocking it is a false positive. Combine moderate ML scores with rule
-evidence, keep a high cutoff for strong evidence from either signal, and use
-explicit route thresholds so tuning one endpoint does not exempt the whole
-application.
+Blocking a legitimate security article because it contains attack examples is
+a **false positive**. Route thresholds let you tune that endpoint while keeping
+stricter thresholds elsewhere.
+
+### Keep a legitimate article working
+
+The application accepts legitimate security articles containing attack examples.
+The tester submits this article using the real classifier:
+
+```bash
+curl --include http://127.0.0.1:8080/articles \
+  -H 'Content-Type: text/plain' \
+  --data-binary 'A security article explaining or 1=1 --'
+```
+
+Its heuristic score is `5` and ML score is `69`. First, the tester omits the
+route override: default `heuristic_high: 5` selects `heuristic_high`, blocking
+the legitimate article. It then restarts with the `/articles` override shown
+below. Your firewall must preserve the article, returning HTTP `200`,
+`X-WAF-Score: 5`, `X-WAF-ML-Score: 69`, and:
+
+```json
+{"article":"A security article explaining or 1=1 --","published":true}
+```
+
+The application must receive the original article bytes, and a clean product
+search must still work. A hard denylist match still wins on `/articles`;
+raising score thresholds cannot exempt it.
 
 ### Policy
 
@@ -35,19 +58,16 @@ Add an optional `decisions` object:
 }
 ```
 
-Exact matching confines route tuning to its intended endpoint. Decoding ensures
-an encoded spelling such as `/articl%65s` selects the same policy as `/articles`.
 Use the first route whose `path` exactly matches the once-percent-decoded
 request path, case-sensitively, without NFKC normalization or case folding. This
 applies even when inspection normalization is disabled. The query string is
-excluded. If no route matches, use `default`. `/articles/extra` and `/Articles`
-do not match `/articles`.
+excluded. If no route matches, use `default`. `/articl%65s` matches `/articles`;
+`/articles/extra` and `/Articles` do not.
 
 ### Expected decisions
 
-If a low ML score could cancel strong rule evidence, lowering the model's score
-would also bypass your rules. Let either strong signal block on its own, and
-require both signals when neither is strong enough alone.
+Let either strong signal block on its own; a low ML score must not cancel
+strong rule evidence. Require both signals when neither is strong enough alone.
 
 When classification succeeds, these route decisions replace the separate
 heuristic and classifier cutoffs. Denylist rules still win first. Otherwise,
@@ -94,43 +114,7 @@ HTTP `403` with:
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
-
-```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
-```
-
-Run the exercise with:
-
-```bash
-codecrafters test
-```
-
-The application accepts legitimate security articles containing attack examples.
-The tester submits this article using the real classifier:
-
-```bash
-curl --include http://127.0.0.1:8080/articles \
-  -H 'Content-Type: text/plain' \
-  --data-binary 'A security article explaining or 1=1 --'
-```
-
-Its heuristic score is `5` and ML score is `69`. First, the tester omits the
-route override: default `heuristic_high: 5` selects `heuristic_high`, blocking
-the legitimate article. It then restarts with the `/articles` override shown
-above. Your firewall must preserve the article, returning HTTP `200`,
-`X-WAF-Score: 5`, `X-WAF-ML-Score: 69`, and:
-
-```json
-{"article":"A security article explaining or 1=1 --","published":true}
-```
-
-The tester checks that the application receives the original article bytes. A
-clean product search must still work. This demonstrates a false positive that
-route thresholds can address. A hard denylist match still wins on `/articles`.
-Raising score thresholds cannot exempt it.
+Run `codecrafters test` to exercise the article and decision boundaries.
 
 Additional scripted cases check exact route matching, inclusive cutoffs, the
 heuristic floor, denylist precedence, and detector-outage fallback. With
@@ -146,9 +130,7 @@ coverage. Check legitimate traffic as well as attack probes when tuning policy.
 - These are teaching thresholds, not production recommendations. A route
   override changes score thresholds. It cannot disable denylist matches or the
   size, response, and virtual-patch controls covered in later stages.
-- Each thresholds object supplies all four fields as positive integers. Route
-  matching uses the original decoded path even when inspection uses a
-  case-folded copy. Changing the inspection representation must not change
-  application routing.
+- Each thresholds object supplies all four fields as positive integers.
+  Inspection normalization must not change application routing.
 - For the operational tradeoff, see
   [Cloudflare's guidance on false positives and combined score rules](https://developers.cloudflare.com/waf/detections/attack-score/).

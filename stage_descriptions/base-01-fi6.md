@@ -4,13 +4,18 @@ In this stage, you'll start an HTTP server that answers health checks on port
 ### Why start with health checks?
 
 Your firewall will stand between external clients and a protected web
-application. A health check lets the caller ask whether the firewall is running,
-even when that application is unavailable. Start with this small endpoint before
-adding forwarding or inspection.
+application. A health check tells the caller whether the firewall is running,
+even when that application is unavailable.
 
 ```text
 External client -> Your firewall -> Application server
                    /health          (--origin)
+```
+
+The tester sends this request twice. Each call should print `200`:
+
+```bash
+curl --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:8080/health
 ```
 
 ### Expected behavior
@@ -36,29 +41,13 @@ flags so the caller can supply them. Keep this interface throughout the challeng
 ### Tests
 
 The tester writes an empty policy (`{}`) to a temporary file and starts your
-program like this. The service URLs and absolute policy path vary between runs:
+program with the supplied addresses and path:
 
 ```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-Run the exercise with:
-
-```bash
-codecrafters test
-```
-
-The tester sends the equivalent of this request twice:
-
-```bash
-curl --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:8080/health
-```
-
-Each call should print:
-
-```text
-200
-```
+Run `codecrafters test` to exercise the health checks above.
 
 The tester gives your program up to five seconds from startup to return HTTP
 `200` from `GET /health`, including the time spent waiting for the response.
@@ -69,8 +58,7 @@ after startup has a three-second deadline.
 
 - A response body is optional. Other methods and paths are introduced in later
   stages.
-- The tester supplies service addresses and a temporary policy path. Read the
-  flags rather than hardcoding the example values. The tester may also start
-  your program from a different working directory.
+- Read the flags rather than hardcoding the example values. The tester may
+  start your program from a different working directory.
 - All stages use local services and dummy data. No paid API key is needed. Write
   debugging output to standard error.

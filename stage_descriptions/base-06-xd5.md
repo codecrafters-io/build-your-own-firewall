@@ -3,10 +3,30 @@ score.
 
 ### Why add a detector?
 
-Signature rules only recognize configured patterns. A learned detector can
-supply another signal for modified attacks, but it can also be wrong or
-unavailable. Your firewall will integrate that service with a deadline and an
-explicit fallback rather than treating its answer as unquestionable.
+Signature rules recognize configured patterns. A learned detector supplies
+another signal, but can be wrong or unavailable. Integrate it with a deadline
+and an explicit fallback.
+
+### Detect a probe without a rule match
+
+The coursework detector runs a supplied frozen classifier. With normalization,
+the earlier rules, and classifier cutoff `70`, the tester sends:
+
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=1%27+AND+SLEEP(5)%23'
+```
+
+The shipped model scores this probe `77`, while the denylist and heuristic
+signals do not match. Expect HTTP `403`, `X-WAF-Score: 0`,
+`X-WAF-Detector-Status: ok`, `X-WAF-ML-Score: 77`, and:
+
+```json
+{ "error": { "rule": "ml_score" } }
+```
+
+The application must receive no forwarded probe. A clean `q=tea+cup` search
+still returns HTTP `200` with product results. The application executes no SQL
+or sleep operation for this probe.
 
 ### Detector contract
 
@@ -18,13 +38,12 @@ for each inspected request, including requests matching earlier rules. Use
 `Content-Type: application/json` and this shape:
 
 ```json
-{ "inputs": ["/search", "union select password from users", ""] }
+{ "inputs": ["/search", "1' and sleep(5)#", ""] }
 ```
 
-With normalization enabled, this example corresponds to
-`GET /search?q=union+select+password+from+users` with an empty body and no
-inspected headers. The inputs are the decoded path, query value, and body. The
-trailing `""` represents the empty body, not an extra placeholder to append.
+For the probe above, these inputs are the decoded path, query value, and empty
+body, with no inspected headers. The trailing `""` represents the empty body,
+not an extra placeholder to append.
 
 Send the current separate inspection strings, using normalized forms when
 enabled. Input ordering may vary. Preserve every input and its boundary. Send
@@ -35,8 +54,7 @@ Health checks and requests rejected during input validation make no detector
 call and include no detector diagnostic headers. An origin `400` response is
 different: inspection and detection have already occurred before forwarding.
 
-An error page or malformed score must not become a policy decision. A successful
-result is HTTP `200` with exactly one JSON object:
+A successful result is HTTP `200` with exactly one JSON object:
 
 ```json
 { "score": 92 }
@@ -58,13 +76,11 @@ Denylist matches have first priority, then the earlier heuristic cutoff. If
 neither matches and the detector score is at least the classifier threshold,
 select `ml_score`. Use the earlier block/log responses.
 
-A slow detector must not hold requests open indefinitely. A deadline that
-restarts with each byte would still allow a trickling reply to do that.
-
 Each detector request has a **200 ms total deadline**, including connecting and
 reading response headers and the complete body. Receiving another byte does not
-restart the deadline. Do not retry or follow redirects. Any transport failure,
-timeout, non-`200` status, or invalid response makes detection unavailable.
+restart the deadline, so a trickling reply cannot hold the request open. Do not
+retry or follow redirects. Any transport failure, timeout, non-`200` status, or
+invalid response makes detection unavailable.
 
 To preserve availability during a detector outage, this course uses a
 **fail-open** policy: fall back to the earlier denylist and heuristic rules.
@@ -99,40 +115,7 @@ documentation.
 
 ### Tests
 
-The tester starts the protected application and detector, writes the trusted
-policy, and starts your firewall with this interface. Addresses and the absolute
-policy path vary between runs:
-
-```bash
-./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
-```
-
-Run the exercise with:
-
-```bash
-codecrafters test
-```
-
-The coursework detector runs a supplied frozen classifier. With normalization,
-the earlier rules, and classifier cutoff `70`, the tester sends:
-
-```bash
-curl --include 'http://127.0.0.1:8080/search?q=1%27+AND+SLEEP(5)%23'
-```
-
-The normalized inputs are `["/search", "1' and sleep(5)#", ""]`. The shipped
-model scores them `77`, while the denylist and heuristic signals do not match.
-Expect HTTP `403`, `X-WAF-Score: 0`, `X-WAF-Detector-Status: ok`,
-`X-WAF-ML-Score: 77`, and:
-
-```json
-{ "error": { "rule": "ml_score" } }
-```
-
-The application must receive no forwarded probe. A clean `q=tea+cup` search
-still returns HTTP `200` with product results. The application executes no SQL
-or sleep operation for this probe: this exercise demonstrates additional
-inference-based detection, not a successful exploit.
+Run `codecrafters test` to exercise the probe and detector integration.
 
 The tester also substitutes scripted detector responses to check exact cutoffs,
 zero scores, and fallback independently of model quality. For example, score
