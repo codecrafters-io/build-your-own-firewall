@@ -85,9 +85,6 @@ names, names listed in `Connection`, and the `X-WAF-` prefix case-insensitively:
   `Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailer`,
   `Transfer-Encoding`, and `Upgrade`.
   Also remove any header named in the comma-separated `Connection` value.
-- Framing tells the receiver where the body ends. A library may remove chunk
-  markers when decoding a response. Remove the incoming `Content-Length` and
-  let your HTTP library supply framing that matches the outgoing body.
 - Only your firewall should report its decisions. An origin-supplied
   `X-WAF-Match: xss-script` could falsely label a clean request. Remove headers
   beginning with `X-WAF-` in both directions. After cleanup, add your own
