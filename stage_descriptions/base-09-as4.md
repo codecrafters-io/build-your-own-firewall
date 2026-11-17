@@ -112,13 +112,16 @@ fails. See the [`encoding/json` documentation](https://pkg.go.dev/encoding/json)
 
 ### Tests
 
-Run `codecrafters test` to exercise the debug response and inspection boundaries.
+The tester verifies that:
 
-Other cases check escaped JSON values and keys, duplicate-key values, raw-text
-fallback for nonstandard JSON constants, invalid UTF-8 inspection, size limits,
-log-mode match replacement, and unchanged clean responses. An escaped
-`"\u0049NTERNAL_KEY_7F2A"` must be caught after JSON decoding. A clean response
-with partial marker `INTERNAL_` must pass unchanged when it fits the size limit.
+- The debug response above is withheld before any origin content escapes.
+- Escaped JSON values and keys, including `"\u0049NTERNAL_KEY_7F2A"`, are caught
+  after decoding. Duplicate-key values are also inspected.
+- Nonstandard JSON constants use raw-text fallback, and invalid UTF-8 is inspected
+  as specified.
+- Oversized responses are withheld, and response denials replace log-mode matches.
+- Clean responses pass unchanged when they fit the size limit, including a body
+  containing only the partial marker `INTERNAL_`.
 
 ### Notes
 

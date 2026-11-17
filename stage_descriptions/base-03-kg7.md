@@ -91,13 +91,13 @@ content or let a clean request inherit an earlier match.
 
 ### Tests
 
-Run `codecrafters test` to exercise the preview, rule order, case-sensitive
-matching, and request-local headers.
+The tester verifies that:
 
-For the attack preview above, expect HTTP `200` in log mode and HTTP `403` with
-`{"error":{"rule":"xss-script"}}` in block mode. Both responses must carry
-`X-WAF-Match: xss-script`. The tester checks that only the log-mode request
-reaches the application and that a clean preview still returns HTTP `200`.
+- The attack preview returns HTTP `200` in log mode and HTTP `403` with
+  `{"error":{"rule":"xss-script"}}` in block mode. Both responses carry
+  `X-WAF-Match: xss-script`, and only the log-mode request reaches the application.
+- A clean preview returns HTTP `200` without inheriting an earlier match header.
+- Rules match case-sensitively and follow policy order.
 
 ### Notes
 

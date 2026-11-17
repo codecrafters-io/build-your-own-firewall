@@ -40,19 +40,23 @@ flags so the caller can supply them. Keep this interface throughout the challeng
 
 ### Tests
 
-The tester writes an empty policy (`{}`) to a temporary file and starts your
-program with the supplied addresses and path:
+Run the tests for each stage with `codecrafters test`. The tester writes the
+policy to a temporary file and starts your program with the supplied addresses
+and path:
 
 ```bash
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-Run `codecrafters test` to exercise the health checks above.
+Service addresses and the absolute policy path vary between runs. From the next
+stage onward, the tester also starts the application and detector.
 
-The tester gives your program up to five seconds from startup to return HTTP
-`200` from `GET /health`, including the time spent waiting for the response.
-It then checks that your server can answer repeated requests. Each request
-after startup has a three-second deadline.
+For this stage, the tester uses an empty policy (`{}`) and verifies that:
+
+- `GET /health` returns HTTP `200` within five seconds of startup, including the
+  time spent waiting for the response.
+- Repeated health checks succeed, each within a three-second deadline after
+  startup.
 
 ### Notes
 

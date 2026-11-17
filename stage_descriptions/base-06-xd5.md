@@ -115,14 +115,18 @@ documentation.
 
 ### Tests
 
-Run `codecrafters test` to exercise the probe and detector integration.
+The tester verifies that:
 
-The tester also substitutes scripted detector responses to check exact cutoffs,
-zero scores, and fallback independently of model quality. For example, score
-`70` with cutoff `70` must block with `ml_score`. Other cases cover calls on
-denylist matches, invalid responses, redirects, errors, and the complete 200 ms
-deadline, including trickled headers/body bytes and incomplete replies. If the
-detector returns `503`, an otherwise unmatched request must reach the origin.
+- The probe above is blocked with `ml_score`, and a clean search still succeeds.
+- Exact cutoffs and zero scores work with scripted detector responses. A score
+  of `70` with cutoff `70` blocks with `ml_score`.
+- Denylist matches still trigger a detector call.
+- Invalid responses, redirects, errors, and incomplete replies trigger fallback.
+  If the detector returns `503`, an otherwise unmatched request reaches the origin.
+- The complete detector call respects the 200 ms deadline, including trickled
+  header and body bytes.
+
+Scripted responses check integration and fallback independently of model quality.
 
 ### Notes
 

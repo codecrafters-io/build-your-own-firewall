@@ -117,12 +117,15 @@ garbage is rejected, while trailing whitespace remains allowed.
 
 ### Tests
 
-Run `codecrafters test` to exercise the preview and body-validation cases.
+The tester verifies that:
 
-Other cases use smaller policy limits to check inclusive byte boundaries, form
-decoding, exact detector inputs, unchanged clean JSON, invalid bodies, empty
-bodies, and unsupported encodings. With a four-byte limit, the UTF-8 body `éé`
-is eligible, while `ééa` must return HTTP `413`.
+- The JSON-escaped preview above is blocked, while clean JSON reaches the
+  application unchanged.
+- Size limits count bytes inclusively. With a four-byte limit, the UTF-8 body
+  `éé` is eligible, while `ééa` returns HTTP `413`.
+- Form decoding and structured-body parsing produce the exact detector inputs.
+- Invalid bodies and unsupported encodings receive the specified errors.
+- Empty bodies add no body inputs and require no media type.
 
 ### Notes
 

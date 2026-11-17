@@ -141,16 +141,18 @@ described above and check decoding errors for both names and values. See the
 
 ### Tests
 
-Run `codecrafters test` to exercise the search and encoding cases.
+The tester verifies that:
 
-Expect the encoded `union+select` search above to return HTTP `403` with
-`X-WAF-Match: sql-union` and `{"error":{"rule":"sql-union"}}`, without
-reaching the application. The clean `q=tea+cup` search must return HTTP `200`
-with `{"results":[{"item":"tea cup"}]}`.
-
-Other cases check one-layer decoding, Unicode normalization and case folding,
-independent inputs, bare query parameters, ignored names in `name=value` pairs,
-invalid encodings, and unchanged log-mode traffic.
+- The encoded `union+select` search returns HTTP `403` with
+  `X-WAF-Match: sql-union` and `{"error":{"rule":"sql-union"}}`, without
+  reaching the application.
+- The clean `q=tea+cup` search returns HTTP `200` with
+  `{"results":[{"item":"tea cup"}]}`.
+- Inspection applies one-layer decoding, Unicode normalization, and case folding
+  to independent inputs.
+- Bare query parameters, names in `name=value` pairs, and invalid encodings are
+  handled as specified.
+- Log-mode traffic reaches the application unchanged.
 
 ### Notes
 

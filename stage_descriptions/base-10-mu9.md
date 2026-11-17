@@ -108,7 +108,14 @@ first failing patch's ID, as shown for `export-fields` above.
 
 ### Tests
 
-Run `codecrafters test` to exercise the exports and final replay.
+The tester verifies that:
+
+- Private-field exports are blocked, while public-field exports reach the
+  application unchanged.
+- Encoded paths, policy-defined routes and arguments, invalid field arrays, and
+  duplicate keys are handled as specified.
+- Patches remain enforced in log mode and during detector outages.
+- Earlier controls still pass their protocol and failure-path checks.
 
 The same test run replays the earlier controls against the application and
 prints requests, direct application responses, firewall responses, diagnostic
@@ -125,10 +132,6 @@ fails the stage. This probe executes no SQL. The false positive is a legitimate
 article containing the hard signature `union select`. Route score tuning cannot
 override that rule. The other article, clean preview, product search, and public
 export remain allowed. Passing verifies this policy, including its limitations.
-
-Additional cases check encoded paths, policy-defined routes and arguments,
-invalid field arrays, duplicate keys, log mode, and detector outage, followed by
-the earlier protocol and failure-path checks.
 
 ### Notes
 

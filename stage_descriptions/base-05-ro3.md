@@ -107,19 +107,18 @@ and the response reports `X-WAF-Match: heuristic_score`.
 
 ### Tests
 
-Run `codecrafters test` to exercise the search and scoring cases.
+The tester verifies that:
 
-Expect the `or 1=1 --` search above to return HTTP `403` with
-`{"error":{"rule":"heuristic_score"}}`, `X-WAF-Score: 5`, and
-`X-WAF-Signals: sql-or,sql-comment` in either signal order. The tester checks
-that the attack never reaches the application and that a clean search still
-returns HTTP `200`.
-
-Other cases check repeated signals, clean-request diagnostics, and denylist
-precedence while retaining the full heuristic score and all fired signal IDs.
-Whitespace cases verify that the signal matches the same characters in Go and
-Python. The tester accepts either ID order, but missing, repeated, or extra IDs
-fail.
+- The `or 1=1 --` search returns HTTP `403` with
+  `{"error":{"rule":"heuristic_score"}}`, `X-WAF-Score: 5`, and
+  `X-WAF-Signals: sql-or,sql-comment` in either signal order. The attack never
+  reaches the application.
+- A clean search returns HTTP `200` with clean-request diagnostics.
+- Repeated signal matches count only once. Missing, repeated, or extra signal
+  IDs fail; either ID order is accepted.
+- Denylist matches take precedence while retaining the full heuristic score and
+  all fired signal IDs.
+- Whitespace matching uses the same characters in Go and Python.
 
 ### Notes
 

@@ -95,17 +95,15 @@ Preserve all remaining application headers.
 
 ### Tests
 
-Run `codecrafters test` to exercise the examples and protocol cases.
+The tester verifies that:
 
-For this and later stages, the tester starts the application and detector,
-writes the trusted policy, and launches your firewall using the flags from
-earlier stages. Service addresses and the absolute policy path vary between
-runs.
-
-Additional cases check all five methods, exact request bytes and headers,
-error and redirect responses, and connection/reserved-header removal.
-Incomplete responses and an unavailable origin must produce the specified `502`
-without releasing origin content. An origin `400` must remain `400`.
+- The search and article requests above return the expected application responses.
+- All five methods preserve request bytes and application headers.
+- Origin error and redirect responses are relayed unchanged. An origin `400`
+  remains `400`.
+- Connection-specific and reserved headers are removed in both directions.
+- Incomplete responses and an unavailable origin produce the specified `502`
+  without releasing origin content.
 
 ### Notes
 

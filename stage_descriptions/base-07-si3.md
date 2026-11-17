@@ -114,16 +114,21 @@ HTTP `403` with:
 
 ### Tests
 
-Run `codecrafters test` to exercise the article and decision boundaries.
+The tester verifies that:
 
-Additional scripted cases check exact route matching, inclusive cutoffs, the
-heuristic floor, denylist precedence, and detector-outage fallback. With
-heuristic score `3` and scripted ML score `70`, `/search` selects
-`combined_scores` while `/articles` passes under its route thresholds.
+- The article above is blocked under default thresholds and reaches the
+  application unchanged with the `/articles` override.
+- Route matching is exact, cutoffs are inclusive, and combined decisions require
+  the heuristic floor.
+- With heuristic score `3` and scripted ML score `70`, `/search` selects
+  `combined_scores` while `/articles` passes under its route thresholds.
+- Denylist matches retain precedence, and detector outages use the earlier
+  fallback rules.
+- The earlier ML-only probe scoring `77`, with no heuristic evidence, is allowed
+  under the combined default thresholds.
 
-The earlier ML-only probe scoring `77` has no heuristic evidence. Under these
-combined default thresholds, it is allowed. Raising a cutoff can lose detection
-coverage. Check legitimate traffic as well as attack probes when tuning policy.
+Raising a cutoff can lose detection coverage. Check legitimate traffic as well
+as attack probes when tuning policy.
 
 ### Notes
 
