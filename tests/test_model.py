@@ -2,6 +2,7 @@ import csv
 import hashlib
 import json
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import sys
 
@@ -54,6 +55,22 @@ class ModelTests(unittest.TestCase):
         observed = score(inputs, load_model())
         # Assert
         self.assertEqual(observed, 77)
+
+    # Evaluation uses the same five whitespace characters as the teaching policy.
+    def test_heuristic_whitespace(self):
+        # Arrange
+        cases = [(' ', True), ('\t', True), ('\n', True), ('\f', True),
+                 ('\r', True), ('\v', False), ('\u2028', False), ('\u0085', False)]
+        rows = [{'text': f'or{space}1=1 --', 'attack': '1'} for space, _ in cases]
+        # Act
+        with patch('evaluate.csv.DictReader', return_value=rows), \
+                patch('evaluate.score', return_value=0):
+            observed = evaluate()['observations']
+        # Assert
+        for (space, expected), observation in zip(cases, observed):
+            with self.subTest(whitespace=repr(space)):
+                self.assertEqual(observation['blocked']['rules'], expected)
+                self.assertEqual(observation['blocked']['combined'], expected)
 
     # The committed report is reproducible from the frozen model and held-out set.
     def test_evaluation_report(self):

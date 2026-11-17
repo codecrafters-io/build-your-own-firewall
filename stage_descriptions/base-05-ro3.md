@@ -25,7 +25,7 @@ Add an optional `heuristics` object alongside earlier fields:
   "heuristics": {
     "threshold": 5,
     "signals": [
-      { "id": "sql-or", "pattern": "or\\s+1\\s*=\\s*1", "weight": 3 },
+      { "id": "sql-or", "pattern": "or[ \\t\\n\\f\\r]+1[ \\t\\n\\f\\r]*=[ \\t\\n\\f\\r]*1", "weight": 3 },
       { "id": "sql-comment", "pattern": "--", "weight": 2 }
     ]
   }
@@ -35,6 +35,12 @@ Add an optional `heuristics` object alongside earlier fields:
 Each pattern is a regular expression searched anywhere within each current
 inspection input. Use the normalized inputs when normalization is enabled. A
 pattern cannot span input boundaries.
+
+Use explicit character classes for whitespace. The example's `[ \t\n\f\r]`
+matches only space, tab, line feed, form feed, and carriage return. Vertical tab
+and Unicode line separator `U+2028` do not match this class. Inspection happens
+after the earlier normalization, which can map some Unicode spaces to ASCII
+space.
 
 The request score is the sum of weights of **distinct matching signals**. A
 signal contributes once even if its pattern repeats or matches several inputs.
@@ -125,13 +131,17 @@ consequences, not executed SQL.
 
 Other cases check repeated signals, clean-request diagnostics, and denylist
 precedence while retaining the full heuristic score and all fired signal IDs.
-The tester accepts either ID order, but missing, repeated, or extra IDs fail.
+Whitespace cases verify that the signal matches the same characters in Go and
+Python. The tester accepts either ID order, but missing, repeated, or extra IDs
+fail.
 
 ### Notes
 
 - Supplied signal IDs are unique. Weights and thresholds are positive integers.
   Patterns use syntax shared by Go's regular-expression library and Python's
-  `re`, without flags or backreferences.
+  `re`, without flags or backreferences. Whitespace shorthands `\s` and `\S`
+  are outside this shared subset because their character sets differ by
+  language. Use explicit classes instead.
 - The patterns are small teaching examples, not a complete SQL injection
   detector.
 - The

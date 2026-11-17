@@ -17,7 +17,7 @@ def evaluate():
         text = row['text'].casefold()
         ml = score([text], model)
         hard = any(term in text for term in ['union select', '<script'])
-        heuristic = 3 * bool(re.search(r'or\s+1\s*=\s*1', text)) + 2 * ('--' in text)
+        heuristic = 3 * bool(re.search(r'or[ \t\n\f\r]+1[ \t\n\f\r]*=[ \t\n\f\r]*1', text)) + 2 * ('--' in text)
         decisions = {'rules': hard or heuristic >= 5, 'ml_cutoff': ml >= 70,
                      'combined': hard or heuristic >= 5 or ml >= 90 or (ml >= 60 and heuristic >= 3)}
         attack = row['attack'] == '1'

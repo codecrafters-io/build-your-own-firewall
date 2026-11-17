@@ -60,8 +60,10 @@ Each call should print:
 200
 ```
 
-The tester expects your server to become healthy within five seconds of startup
-and checks that it can answer repeated requests.
+The tester gives your program up to five seconds from startup to return HTTP
+`200` from `GET /health`, including the time spent waiting for the response.
+It then checks that your server can answer repeated requests. Each request
+after startup has a three-second deadline.
 
 ### Notes
 

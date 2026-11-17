@@ -34,7 +34,8 @@ For a nonempty body, replace the earlier raw-body inspection input with:
 | `text/plain`                        | The decoded text                                                              |
 
 Ignore media-type case and parameters such as `; charset=utf-8`. Use the same
-one-layer form decoding as for queries. JSON keys, numbers, booleans, and null
+one-layer percent and plus decoding as for queries. A form field without `=`
+contributes an empty value. JSON keys, numbers, booleans, and null
 do not contribute strings. Keep the path, query, and configured header inputs,
 then apply the earlier normalization to every inspection string when enabled.
 

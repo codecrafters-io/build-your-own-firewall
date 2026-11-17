@@ -38,19 +38,20 @@ stages with these separate strings:
 | Source  | Inspection input                                                                  |
 | ------- | --------------------------------------------------------------------------------- |
 | Path    | Percent-decoded once, keeping `+` as `+`                                          |
-| Query   | Each parameter's value, percent-decoded once, with `+` becoming a space           |
+| Query   | Each value or bare parameter, percent-decoded once, with `+` becoming a space    |
 | Headers | Each UTF-8 header occurrence named by `inspect_headers`, without percent decoding |
 | Body    | The original UTF-8 text, with structured parsing introduced in later stages       |
 
 With normalization enabled, query parameters are separated by `&`, and the first
-`=` separates a name from its value. A parameter without `=` has an empty value.
-Its name is validated but not inspected. Preserve repeated values as independent
-inputs.
+`=` separates a name from its value. Inspect only the value of a `name=value`
+pair. For a bare parameter without `=`, inspect the entire parameter as a
+separate input. For example, `?union+select` contributes `union select`, while
+`?flag=` contributes an empty string. Preserve repetitions as independent inputs.
 
 Malformed encodings have no reliable decoded inspection view. Validate percent
 escapes and decoded UTF-8 in the path even when normalization is disabled.
-When normalization is enabled, also validate query names and
-values, but do not inspect query names. An invalid path or query escape or
+When normalization is enabled, also validate query names and values. Names in
+`name=value` pairs are not inspection inputs. An invalid path or query escape or
 invalid decoded UTF-8 returns HTTP `400`, JSON `error.rule: "invalid_request"`,
 before the origin is contacted. The Notes section covers malformed paths
 rejected by the HTTP server itself.
@@ -81,6 +82,7 @@ With the policy above:
 | Request input              | Inspected value | Result       |
 | -------------------------- | --------------- | ------------ |
 | Query `q=%3Cscript%3E`     | `<script>`      | `xss-script` |
+| Query `%3Cscript%3E`       | `<script>`      | `xss-script` |
 | Query `q=%253Cscript%253E` | `%3cscript%3e`  | No match     |
 | `X-Search: ＜ＳＣＲＩＰＴ` | `<script`       | `xss-script` |
 | Query `q=tea+cup`          | `tea cup`       | No match     |
@@ -136,8 +138,9 @@ inspection view must find `union select`, return HTTP `403` with
 
 The tester then requests `q=tea+cup`. It must still return HTTP `200` with
 `{"results":[{"item":"tea cup"}]}`. Other cases check one-layer decoding,
-Unicode normalization and case folding, independent inputs, ignored query names,
-invalid encodings, and unchanged log-mode traffic.
+Unicode normalization and case folding, independent inputs, bare query
+parameters, ignored names in `name=value` pairs, invalid encodings, and unchanged
+log-mode traffic.
 
 ### Notes
 
@@ -145,8 +148,8 @@ invalid encodings, and unchanged log-mode traffic.
   runs. It must return HTTP `400`, but its body is not prescribed.
 
 - JSON escapes and form-encoded bodies are handled in later stages. This stage
-  does not inspect query names or arbitrary headers. Unlisted representations
-  can still evade a rule.
+  inspects bare query parameters, but not names in `name=value` pairs or
+  arbitrary headers. Unlisted representations can still evade a rule.
 - Read more about [Unicode normalization](https://www.unicode.org/reports/tr15/)
   and
   [URL encoding](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).
