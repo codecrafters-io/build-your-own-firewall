@@ -101,13 +101,7 @@ The direct application and the log-mode firewall both return HTTP `200` with
 `Content-Type: text/html; charset=utf-8` and:
 
 ```html
-<!doctype html><title>Preview</title>
-<div>
-  Preview:
-  <script>
-    alert(1);
-  </script>
-</div>
+<!doctype html><title>Preview</title><div>Preview: <script>alert(1)</script></div>
 ```
 
 Your log-mode response must also carry `X-WAF-Match: xss-script`. The test

@@ -120,12 +120,7 @@ curl --include 'http://127.0.0.1:8080/search?q=union+select+password+from+users'
 The output first shows the direct application's HTTP `200` response:
 
 ```json
-{
-  "results": [
-    { "item": "tea cup" },
-    { "password_hash": "DUMMY_PRIVATE_HASH", "user": "admin" }
-  ]
-}
+{"results":[{"item":"tea cup"},{"password_hash":"DUMMY_PRIVATE_HASH","user":"admin"}]}
 ```
 
 The raw-target rule from earlier stages misses `union+select`. Your normalized
@@ -146,7 +141,20 @@ log-mode traffic.
 
 - A malformed path escape may be rejected by the HTTP server before your handler
   runs. It must return HTTP `400`, but its body is not prescribed.
-
+- **Python:** `urllib.parse.unquote` leaves malformed escapes such as `%ZZ`
+  unchanged and replaces invalid UTF-8 such as `%FF` by default. Validate that
+  every `%` in the original component is followed by two hexadecimal digits,
+  then decode with `encoding="utf-8", errors="strict"`. Strict decoding alone
+  does not reject `%ZZ`. Use `unquote` for paths and `unquote_plus` for query
+  components so `+` has the required meaning. See the
+  [URL-decoding documentation](https://docs.python.org/3.14/library/urllib.parse.html#urllib.parse.unquote).
+- **Go:** `r.URL.Path` is already percent-decoded; decoding it again would
+  violate the one-layer rule. `url.QueryUnescape` reports malformed escapes,
+  but its result still needs a `utf8.ValidString` check. Validate the decoded
+  path's UTF-8 too. `r.URL.Query()` silently drops malformed pairs and does not
+  distinguish bare parameters from empty values. Split `r.URL.RawQuery` as
+  described above and check decoding errors for both names and values. See the
+  [`net/url` documentation](https://pkg.go.dev/net/url).
 - JSON escapes and form-encoded bodies are handled in later stages. This stage
   inspects bare query parameters, but not names in `name=value` pairs or
   arbitrary headers. Unlisted representations can still evade a rule.

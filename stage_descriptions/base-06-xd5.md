@@ -129,6 +129,17 @@ detector returns `503`, an otherwise unmatched request must reach the origin.
 
 ### Notes
 
+- **Python:** `http.client.HTTPConnection(timeout=0.2)` limits blocking socket
+  operations, not the total request duration. A detector sending one byte at a
+  time can keep header or body reads alive past the deadline. A
+  `ThreadPoolExecutor` used in a `with` block also waits for running work when
+  the block exits, even if `future.result(timeout=0.2)` has raised a timeout.
+  Enforce one deadline measured with a monotonic clock across connection,
+  headers, and body, and ensure timeout cleanup does not wait for the slow
+  detector before continuing with fallback. See the
+  [`HTTPConnection` timeout](https://docs.python.org/3.14/library/http.client.html#http.client.HTTPConnection)
+  and [executor shutdown](https://docs.python.org/3.14/library/concurrent.futures.html#concurrent.futures.Executor.shutdown)
+  documentation.
 - The coursework detector includes a small pretrained classifier. Its training
   source and held-out evaluation live in the course source repository under
   `model_development`. You integrate inference. Training is not required.

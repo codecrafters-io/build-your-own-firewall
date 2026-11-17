@@ -124,22 +124,26 @@ curl --include http://127.0.0.1:8080/api/export \
 Expect HTTP `200` and:
 
 ```json
-{ "customer_id": "Customer-4829", "name": "Mira" }
+{"customer_id":"Customer-4829","name":"Mira"}
 ```
 
 The same test run replays the earlier controls against the application and
 prints requests, direct application responses, firewall responses, diagnostic
-scores, and origin request counts. Under the supplied policy, its summary is:
+scores, and origin request counts. Each request must pass checks for its status,
+body, diagnostic headers, and whether it reached the origin. The summary comes
+from those per-request checks. Under the supplied policy, it is:
 
 ```text
 Replay totals: blocked requests=5, withheld responses=1, unblocked probes=1, preserved legitimate=4, false positives=1
 ```
 
-The unblocked ML-only probe scoring `77` executes no SQL. The false positive is
-a legitimate article containing the hard signature `union select`. Route score
-tuning cannot override that rule. The other article, clean preview, product
-search, and public export remain allowed. Passing verifies the specified policy,
-including its visible limitations. It does not mean every example becomes green.
+The ML-only `SLEEP` probe scoring `77` must reach the application unchanged and
+return HTTP `200` with product results under the combined policy. Blocking it
+fails the stage. This probe executes no SQL. The false positive is a legitimate
+article containing the hard signature `union select`. Route score tuning cannot
+override that rule. The other article, clean preview, product search, and public
+export remain allowed. Passing verifies the specified policy, including its
+visible limitations. It does not mean every example becomes green.
 
 Additional cases check encoded paths, policy-defined routes and arguments,
 invalid field arrays, duplicate keys, log mode, and detector outage, followed by

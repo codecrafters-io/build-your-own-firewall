@@ -102,7 +102,7 @@ curl --include 'http://127.0.0.1:8080/search?q=tea+cup'
 Expect HTTP `200`, `X-Request-Id: course-origin`, and:
 
 ```json
-{ "results": [{ "item": "tea cup" }] }
+{"results":[{"item":"tea cup"}]}
 ```
 
 It also publishes an article through your firewall:
@@ -115,7 +115,7 @@ curl --include http://127.0.0.1:8080/articles \
 Expect HTTP `200` and:
 
 ```json
-{ "article": "My first article", "published": true }
+{"article":"My first article","published":true}
 ```
 
 The tester verifies that methods, paths, queries, and body bytes reach the

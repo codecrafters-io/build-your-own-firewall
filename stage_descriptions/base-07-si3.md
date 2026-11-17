@@ -124,7 +124,7 @@ above. Your firewall must preserve the article, returning HTTP `200`,
 `X-WAF-Score: 5`, `X-WAF-ML-Score: 69`, and:
 
 ```json
-{ "article": "A security article explaining or 1=1 --", "published": true }
+{"article":"A security article explaining or 1=1 --","published":true}
 ```
 
 The tester checks that the application receives the original article bytes. A
