@@ -8,8 +8,10 @@ completion_percentage: 5
 languages:
 - slug: go
   release_status: alpha
+  alpha_tester_usernames: ["Kaustav-Bose-Chowdhury"]
 - slug: python
   release_status: alpha
+  alpha_tester_usernames: ["Kaustav-Bose-Chowdhury"]
 marketing:
   difficulty: hard
   sample_extension_idea_title: Inspect streaming responses
