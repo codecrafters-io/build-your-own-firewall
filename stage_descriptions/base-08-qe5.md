@@ -76,6 +76,24 @@ with the denylist rule ID before reaching the origin. A form body
 `comment=%3Cscript%3E` must match too. A clean JSON body must retain its
 original whitespace and escapes when forwarded.
 
+### Library behavior
+
+**Python:** `json.loads` accepts `NaN`, `Infinity`, and `-Infinity` by default,
+and keeps only the last value for a repeated object key. Use a
+`parse_constant` callback that rejects those constants and an
+`object_pairs_hook` that rejects duplicate decoded keys in each object,
+including nested objects. For example, `"name"` and `"\u006eame"` are the
+same key. `json.loads` already rejects trailing non-whitespace data. See the
+[JSON decoder documentation](https://docs.python.org/3.14/library/json.html#standard-compliance-and-interoperability).
+
+**Go:** `json.Unmarshal` into a map loses duplicate-key information. Check
+decoded keys while reading `json.Decoder.Token` values, tracking keys
+separately for each object. A single `Decoder.Decode` call reads only one
+value. Require the next read to return `io.EOF` so a second value or trailing
+garbage is rejected, while trailing whitespace remains allowed.
+`DisallowUnknownFields` does not detect duplicate keys. See the
+[`encoding/json` documentation](https://pkg.go.dev/encoding/json).
+
 ### Tests
 
 The tester starts the protected application and detector, writes the trusted
@@ -122,20 +140,6 @@ is eligible, while `ééa` must return HTTP `413`.
 
 ### Notes
 
-- **Python:** `json.loads` accepts `NaN`, `Infinity`, and `-Infinity` by default,
-  and keeps only the last value for a repeated object key. Use a
-  `parse_constant` callback that rejects those constants and an
-  `object_pairs_hook` that rejects duplicate decoded keys in each object,
-  including nested objects. For example, `"name"` and `"\u006eame"` are the
-  same key. `json.loads` already rejects trailing non-whitespace data. See the
-  [JSON decoder documentation](https://docs.python.org/3.14/library/json.html#standard-compliance-and-interoperability).
-- **Go:** `json.Unmarshal` into a map loses duplicate-key information. Check
-  decoded keys while reading `json.Decoder.Token` values, tracking keys
-  separately for each object. A single `Decoder.Decode` call reads only one
-  value; require the next read to return `io.EOF` so a second value or trailing
-  garbage is rejected, while trailing whitespace remains allowed.
-  `DisallowUnknownFields` does not detect duplicate keys. See the
-  [`encoding/json` documentation](https://pkg.go.dev/encoding/json).
 - Fixtures use UTF-8 and the declared media type. Multipart uploads, compressed
   bodies, chunked request bodies, and alternate JSON encodings are outside the
   required subset. Unsupported nonempty bodies must not be treated as inspected.

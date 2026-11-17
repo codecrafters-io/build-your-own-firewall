@@ -71,6 +71,24 @@ An incomplete origin response still returns HTTP `502` with
 `error.rule: "origin_unavailable"`. Buffering within the size limit does not
 make a truncated body safe to release.
 
+### Library behavior
+
+**Python:** Default `json.loads` keeps only the last value for a repeated key.
+Use `object_pairs_hook` to preserve every key-value pair for inspection,
+including decoded keys and values in nested objects. For example,
+`{"debug":"\u0049NTERNAL_KEY_7F2A","debug":"clean"}` must still be blocked.
+A `parse_constant` callback can reject `NaN` and infinities for the valid-JSON
+inspection path. If parsing fails, still scan the raw text. A clean response
+containing `NaN` must pass unchanged. See the
+[JSON decoder documentation](https://docs.python.org/3.14/library/json.html#standard-compliance-and-interoperability).
+
+**Go:** Unmarshalling into a map can hide earlier duplicate-key values.
+`json.Decoder.Token` exposes every decoded string, including object keys and
+repeated values. `json.Valid` can check that the complete body is valid JSON
+before token inspection. One successful `Decoder.Decode` does not establish
+that no trailing data remains. Keep raw-text inspection when JSON validation
+fails. See the [`encoding/json` documentation](https://pkg.go.dev/encoding/json).
+
 ### Tests
 
 The tester starts the protected application and detector, writes the trusted
@@ -120,20 +138,6 @@ with partial marker `INTERNAL_` must pass unchanged when it fits the size limit.
 
 ### Notes
 
-- **Python:** Default `json.loads` keeps only the last value for a repeated key.
-  Use `object_pairs_hook` to preserve every key-value pair for inspection,
-  including decoded keys and values in nested objects. For example,
-  `{"debug":"\u0049NTERNAL_KEY_7F2A","debug":"clean"}` must still be blocked.
-  A `parse_constant` callback can reject `NaN` and infinities for the valid-JSON
-  inspection path. If parsing fails, still scan the raw text; a clean response
-  containing `NaN` must pass unchanged. See the
-  [JSON decoder documentation](https://docs.python.org/3.14/library/json.html#standard-compliance-and-interoperability).
-- **Go:** Unmarshalling into a map can hide earlier duplicate-key values.
-  `json.Decoder.Token` exposes every decoded string, including object keys and
-  repeated values. `json.Valid` can check that the complete body is valid JSON
-  before token inspection; one successful `Decoder.Decode` does not establish
-  that no trailing data remains. Keep raw-text inspection when JSON validation
-  fails. See the [`encoding/json` documentation](https://pkg.go.dev/encoding/json).
 - The application has already received and processed the request when a response
   is denied. This check does not undo its side effects.
 - This challenge uses complete, uncompressed responses. Streaming inspection
