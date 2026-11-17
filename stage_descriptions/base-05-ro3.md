@@ -109,6 +109,12 @@ and the response reports `X-WAF-Match: heuristic_score`.
 
 Run `codecrafters test` to exercise the search and scoring cases.
 
+Expect the `or 1=1 --` search above to return HTTP `403` with
+`{"error":{"rule":"heuristic_score"}}`, `X-WAF-Score: 5`, and
+`X-WAF-Signals: sql-or,sql-comment` in either signal order. The tester checks
+that the attack never reaches the application and that a clean search still
+returns HTTP `200`.
+
 Other cases check repeated signals, clean-request diagnostics, and denylist
 precedence while retaining the full heuristic score and all fired signal IDs.
 Whitespace cases verify that the signal matches the same characters in Go and

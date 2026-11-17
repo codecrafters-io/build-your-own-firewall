@@ -29,8 +29,8 @@ below. Your firewall must preserve the article, returning HTTP `200`,
 ```
 
 The application must receive the original article bytes, and a clean product
-search must still work. A hard denylist match still wins on `/articles`;
-raising score thresholds cannot exempt it.
+search must still work. A hard denylist match still wins on `/articles`.
+Raising score thresholds cannot exempt it.
 
 ### Policy
 
@@ -61,12 +61,12 @@ Add an optional `decisions` object:
 Use the first route whose `path` exactly matches the once-percent-decoded
 request path, case-sensitively, without NFKC normalization or case folding. This
 applies even when inspection normalization is disabled. The query string is
-excluded. If no route matches, use `default`. `/articl%65s` matches `/articles`;
+excluded. If no route matches, use `default`. `/articl%65s` matches `/articles`.
 `/articles/extra` and `/Articles` do not.
 
 ### Expected decisions
 
-Let either strong signal block on its own; a low ML score must not cancel
+Let either strong signal block on its own. A low ML score must not cancel
 strong rule evidence. Require both signals when neither is strong enough alone.
 
 When classification succeeds, these route decisions replace the separate

@@ -29,7 +29,7 @@ The direct application and the log-mode firewall both return HTTP `200` with
 
 Your log-mode response must also carry `X-WAF-Match: xss-script`. The test
 output shows that the application received the request. A browser can execute
-the reflected script; the tester displays the HTML without executing JavaScript.
+the reflected script. The tester displays the HTML without executing JavaScript.
 
 The tester restarts your firewall in block mode and repeats the request. Expect
 HTTP `403`, `X-WAF-Match: xss-script`, and only:
@@ -93,6 +93,11 @@ content or let a clean request inherit an earlier match.
 
 Run `codecrafters test` to exercise the preview, rule order, case-sensitive
 matching, and request-local headers.
+
+For the attack preview above, expect HTTP `200` in log mode and HTTP `403` with
+`{"error":{"rule":"xss-script"}}` in block mode. Both responses must carry
+`X-WAF-Match: xss-script`. The tester checks that only the log-mode request
+reaches the application and that a clean preview still returns HTTP `200`.
 
 ### Notes
 

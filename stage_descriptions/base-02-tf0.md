@@ -15,8 +15,8 @@ Client <-- 200 + response body -- Firewall <-- Origin
 ### Forward a search and an article
 
 The tester supplies one application with product search, article publishing,
-HTML previews, and record exports. You will protect it throughout the course;
-you only implement the firewall. All records and secrets are dummy data.
+HTML previews, and record exports. You will protect it throughout the course.
+You only implement the firewall. All records and secrets are dummy data.
 
 The tester compares direct and proxied responses, starting with a product search:
 
@@ -57,7 +57,7 @@ the supplied origin URL.
 Preserve JSON whitespace and escaping, empty bodies, and unknown fields.
 
 Relay origin HTTP error and redirect responses. A redirect instructs the
-client to make another request; do not follow it inside the firewall.
+client to make another request. Do not follow it inside the firewall.
 
 Buffering lets you replace a failed response before any origin content escapes.
 Later, it will also let you check responses for secrets.
@@ -98,8 +98,9 @@ Preserve all remaining application headers.
 Run `codecrafters test` to exercise the examples and protocol cases.
 
 For this and later stages, the tester starts the application and detector,
-writes the trusted policy, and launches your firewall using the Stage 1 flags.
-Service addresses and the absolute policy path vary between runs.
+writes the trusted policy, and launches your firewall using the flags from
+earlier stages. Service addresses and the absolute policy path vary between
+runs.
 
 Additional cases check all five methods, exact request bytes and headers,
 error and redirect responses, and connection/reserved-header removal.
