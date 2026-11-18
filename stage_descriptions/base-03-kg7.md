@@ -71,7 +71,7 @@ or decode percent escapes yet. Read rule IDs and terms from policy.
 
 UTF-8 is an encoding that represents text characters as bytes. Decoding the
 body as UTF-8 gives you a string to inspect. Keep the original bytes for
-forwarding, as in the previous stage.
+forwarding, as established by your proxy.
 
 - **Matching order:** Evaluate `denylist` rules in policy order. The first rule
   whose `term` appears in either inspection string wins, regardless of which

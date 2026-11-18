@@ -16,7 +16,7 @@ needs a deadline and an explicit fallback. You do not need to train a model.
 
 ### Detect a probe without a rule match
 
-The coursework detector runs a supplied frozen classifier. With normalization,
+The supplied detector runs a frozen classifier. With normalization,
 the earlier rules, and classifier cutoff `70`, the tester sends:
 
 ```bash
@@ -90,7 +90,7 @@ restart the deadline, so a trickling reply cannot hold the request open. Do not
 retry or follow redirects. Any transport failure, timeout, non-`200` status, or
 invalid response makes detection unavailable.
 
-To preserve availability during a detector outage, this course uses a
+To preserve availability during a detector outage, this challenge uses a
 **fail-open** policy: fall back to the earlier denylist and heuristic rules.
 Detector failure alone does not reject the request. Diagnostics make the loss of
 ML protection visible.
@@ -117,8 +117,8 @@ including when headers or body bytes arrive a little at a time.
 
 ### Notes
 
-- The coursework detector includes a small pretrained classifier. Its training
-  source and held-out evaluation live in the course source repository under
+- The supplied detector includes a small pretrained classifier. Its training
+  source and held-out evaluation live in the challenge repository under
   `model_development`. You integrate inference. Training is not required.
 - Scripted detector scores test your integration and policy behavior. They do
   not measure the supplied model's detection accuracy. The detector is a trusted
@@ -132,6 +132,7 @@ including when headers or body bytes arrive a little at a time.
   [`HTTPConnection` timeout](https://docs.python.org/3.14/library/http.client.html#http.client.HTTPConnection)
   and [executor shutdown](https://docs.python.org/3.14/library/concurrent.futures.html#concurrent.futures.Executor.shutdown)
   documentation.
-- For an example of a WAF using learned scores with rules, see
-  [Cloudflare's attack-score documentation](https://developers.cloudflare.com/waf/detections/attack-score/).
-  Its score convention differs: lower scores indicate greater risk.
+
+For an example of a WAF using learned scores with rules, see
+[Cloudflare's attack-score documentation](https://developers.cloudflare.com/waf/detections/attack-score/).
+Its score convention differs: lower scores indicate greater risk.

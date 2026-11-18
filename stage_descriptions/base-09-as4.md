@@ -113,12 +113,14 @@ marker `INTERNAL_`.
 
 ### Notes
 
-- The application has already received and processed the request when a response
-  is denied. This check does not undo its side effects.
-- This challenge uses complete, uncompressed responses. Streaming inspection
-  requires a different release strategy and is proposed as an extension.
-  Patterns match only the protected representations specified here. They are not
-  a guarantee against every possible data leak.
+The application has already received and processed the request when a response
+is denied. This check does not undo its side effects.
+
+This challenge uses complete, uncompressed responses. Streaming inspection
+requires a different release strategy and is proposed as an extension.
+Patterns match only the protected representations specified here. They are not
+a guarantee against every possible data leak.
+
 - **Python:** Default `json.loads` keeps only the last value for a repeated key.
   For example, `{"debug":"\u0049NTERNAL_KEY_7F2A","debug":"clean"}` must still
   be blocked. The decoder's `object_pairs_hook` exposes all pairs, and
@@ -131,6 +133,6 @@ marker `INTERNAL_`.
   successful `Decoder.Decode` does not establish that no trailing data remains.
   Keep raw-text inspection when JSON validation fails. See the
   [`encoding/json` documentation](https://pkg.go.dev/encoding/json).
-- The
-  [OWASP CRS scoring overview](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/)
-  also distinguishes request and response enforcement.
+
+The [OWASP CRS scoring overview](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/)
+also distinguishes request and response enforcement.

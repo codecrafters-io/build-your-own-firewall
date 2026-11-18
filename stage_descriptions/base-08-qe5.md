@@ -15,7 +15,7 @@ bodies you cannot fully inspect, rather than treating an unchecked body as clean
 ### Catch a JSON-escaped script
 
 The preview route also accepts JSON and form comments. It parses the comment
-before inserting it into HTML. The exercise uses a `4096`-byte inspection limit
+before inserting it into HTML. This stage uses a `4096`-byte inspection limit
 and the earlier detection policies. The tester sends a JSON-escaped script:
 
 ```bash
@@ -136,5 +136,6 @@ validation failures and byte boundaries. With a four-byte limit, the UTF-8 body
   value, so its success does not establish that the complete body is valid JSON.
   Trailing whitespace is allowed, but another value or trailing garbage is not.
   See the [`encoding/json` documentation](https://pkg.go.dev/encoding/json).
-- See the [JSON specification](https://www.rfc-editor.org/rfc/rfc8259.html) and
-  [form-encoding definition](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).
+
+See the [JSON specification](https://www.rfc-editor.org/rfc/rfc8259.html) and
+[form-encoding definition](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).

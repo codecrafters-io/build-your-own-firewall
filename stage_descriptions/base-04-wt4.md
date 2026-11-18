@@ -1,6 +1,6 @@
 Your rules currently inspect the raw target and body. In this stage, you'll
-inspect decoded, normalized inputs so an encoded spelling can match the same
-rule. Forwarded traffic must keep its original bytes.
+inspect decoded, normalized inputs so encoded spellings can match a rule while
+forwarded traffic keeps its original bytes.
 
 ### Why normalize only the inspection view?
 
@@ -13,7 +13,7 @@ URL **percent encoding** writes a byte as `%` followed by two hexadecimal digits
 For example, `%3C` represents `<` in UTF-8. Query values also use `+` to represent
 a space. Decoding exposes the text the application will use. **Normalization**
 then puts equivalent text forms into a common representation for matching.
-This course defines a fixed set of transformations. Production inspection must
+This challenge defines a fixed set of transformations. Production inspection must
 reflect the application's actual input handling.
 
 ### Catch an encoded search
@@ -143,11 +143,13 @@ encodings are rejected, and log-mode traffic reaches the origin unchanged.
 
 ### Notes
 
-- A malformed path escape may be rejected by the HTTP server before your handler
-  runs. It must return HTTP `400`, but its body is not prescribed.
-- JSON escapes and form-encoded bodies are handled in later stages. This stage
-  inspects bare query parameters, but not names in `name=value` pairs or
-  arbitrary headers. Unlisted representations can still evade a rule.
+A malformed path escape may be rejected by the HTTP server before your handler
+runs. It must return HTTP `400`, but its body is not prescribed.
+
+JSON escapes and form-encoded bodies are handled in later stages. This stage
+inspects bare query parameters, but not names in `name=value` pairs or
+arbitrary headers. Unlisted representations can still evade a rule.
+
 - **Python:** `urllib.parse.unquote` leaves malformed escapes such as `%ZZ`
   unchanged and replaces invalid UTF-8 such as `%FF` by default. Its
   `encoding="utf-8", errors="strict"` options reject invalid UTF-8, but do not
@@ -160,6 +162,6 @@ encodings are rejected, and log-mode traffic reaches the origin unchanged.
   `r.URL.Query()` silently drops malformed pairs and loses the distinction
   between bare parameters and empty values. `r.URL.RawQuery` retains the
   original query. See the [`net/url` documentation](https://pkg.go.dev/net/url).
-- Read more about [Unicode normalization](https://www.unicode.org/reports/tr15/)
-  and
-  [URL encoding](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).
+
+Read more about [Unicode normalization](https://www.unicode.org/reports/tr15/)
+and [URL encoding](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).

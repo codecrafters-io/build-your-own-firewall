@@ -22,7 +22,7 @@ curl --include http://127.0.0.1:8080/api/export \
   --data-binary '{"fields":["name","password_hash"]}'
 ```
 
-The direct application returns `Mira` and `DUMMY_PRIVATE_HASH`. The real model's
+The direct application returns `Mira` and `DUMMY_PRIVATE_HASH`. The frozen model's
 score is below the combined cutoffs, and there is no heuristic match. Your patch
 must stop the request before forwarding: expect HTTP `403`,
 `X-WAF-Match: export-fields`, and:
