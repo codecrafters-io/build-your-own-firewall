@@ -1,11 +1,14 @@
-In this stage, you'll combine rule and ML scores using thresholds for each
-application route.
+Your firewall currently applies separate heuristic and ML cutoffs. In this
+stage, you'll combine those scores using thresholds for each application route,
+so legitimate traffic on one route need not use the same cutoffs as another.
 
 ### Why tune decisions by route?
 
 Blocking a legitimate security article because it contains attack examples is
-a **false positive**. Route thresholds let you tune that endpoint while keeping
-stricter thresholds elsewhere.
+a **false positive**. A route identifies an application operation by its URL
+path, such as `/articles`. A route override supplies cutoffs for that path in
+place of the default cutoffs. This lets you tune article publishing while
+keeping stricter thresholds elsewhere.
 
 ### Keep a legitimate article working
 
@@ -114,27 +117,23 @@ HTTP `403` with:
 
 ### Tests
 
-The tester verifies that:
+The tester first demonstrates the article's false positive, then checks that
+the route override lets it through unchanged. Scripted scores check exact
+route matching, decision priority, inclusive cutoffs, and outage fallback.
 
-- The article above is blocked under default thresholds and reaches the
-  application unchanged with the `/articles` override.
-- Route matching is exact, cutoffs are inclusive, and combined decisions require
-  the heuristic floor.
-- With heuristic score `3` and scripted ML score `70`, `/search` selects
-  `combined_scores` while `/articles` passes under its route thresholds.
-- Denylist matches retain precedence, and detector outages use the earlier
-  fallback rules.
-- The earlier ML-only probe scoring `77`, with no heuristic evidence, is allowed
-  under the combined default thresholds.
+The earlier ML-only probe scoring `77`, with no heuristic evidence, is allowed
+under the combined default thresholds. It reaches neither `ml_high: 90` nor
+the heuristic requirement for `combined_scores`.
 
 Raising a cutoff can lose detection coverage. Check legitimate traffic as well
 as attack probes when tuning policy.
 
 ### Notes
 
-- These are teaching thresholds, not production recommendations. A route
-  override changes score thresholds. It cannot disable denylist matches or the
-  size, response, and virtual-patch controls covered in later stages.
+- These thresholds demonstrate policy behavior. They are not recommendations
+  for production use. A route override changes score thresholds. It cannot
+  disable denylist matches or the size, response, and virtual-patch controls
+  covered in later stages.
 - Each thresholds object supplies all four fields as positive integers.
   Inspection normalization must not change application routing.
 - For the operational tradeoff, see

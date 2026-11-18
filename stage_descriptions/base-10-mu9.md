@@ -1,11 +1,15 @@
-In this stage, you'll virtually patch an export endpoint by restricting the
-fields clients may request.
+Your firewall now checks requests and responses, but a request can pass those
+checks and still exploit an application flaw. In this stage, you'll virtually
+patch an export endpoint by restricting the fields clients may request.
 
 ### Why patch an endpoint?
 
+An **endpoint** is an application's HTTP operation, such as `POST /api/export`.
 A **virtual patch** enforces a rule for a known application flaw at the firewall
 while the application awaits a code fix. Here, the export endpoint trusts a
-client's field list and can expose `password_hash` despite both detectors.
+client's field list and can expose `password_hash` despite rule and ML detection.
+A password hash is a value derived from a password for verification. The
+application uses a dummy value here to represent private data.
 
 ### Stop a private-field export
 
@@ -43,9 +47,9 @@ Expect HTTP `200` and:
 
 ### Patch policy
 
-An allowlist names the fields known to be safe. Only forbidding `password_hash`
-would miss another private field added later. Method and path matching confine
-the patch to the operation with the known flaw.
+An **allowlist** names the fields this policy permits. Only forbidding
+`password_hash` would miss another private field added later. Method and path
+matching confine the patch to the operation with the known flaw.
 
 Add an optional list of `virtual_patches`:
 
@@ -108,14 +112,9 @@ first failing patch's ID, as shown for `export-fields` above.
 
 ### Tests
 
-The tester verifies that:
-
-- Private-field exports are blocked, while public-field exports reach the
-  application unchanged.
-- Encoded paths, policy-defined routes and arguments, invalid field arrays, and
-  duplicate keys are handled as specified.
-- Patches remain enforced in log mode and during detector outages.
-- Earlier controls still pass their protocol and failure-path checks.
+The tester checks both exports above, varies the policy-defined route and
+argument, and checks invalid request shapes. Patches must remain enforced in
+log mode and during detector outages. Earlier controls are checked again too.
 
 The same test run replays the earlier controls against the application and
 prints requests, direct application responses, firewall responses, diagnostic
@@ -135,9 +134,9 @@ export remain allowed. Passing verifies this policy, including its limitations.
 
 ### Notes
 
-- This patch restricts one known request shape. It does not authenticate users,
-  establish ownership of records, or replace application authorization and
-  validation.
+- This patch restricts one known request shape. It does not verify a user's
+  identity or decide which records that user may access. The application still
+  needs its own authentication, authorization, and input validation.
 - Application data and attack fixtures are synthetic. The main replay uses the
   frozen classifier. Additional boundary and failure cases use scripted scores.
   Replay outcomes are not production detection-accuracy measurements.

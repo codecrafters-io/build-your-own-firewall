@@ -1,10 +1,16 @@
-In this stage, you'll inspect structured request bodies within a strict size
-limit.
+Your detectors currently see the body as one text string. In this stage,
+you'll extract values from structured bodies before inspecting them, with a
+strict size limit on the data your firewall reads.
 
 ### Why parse request bodies?
 
-Applications decode JSON escapes and form values before using them. Inspect
-those decoded values, and reject bodies you cannot fully inspect.
+JSON strings can represent characters with escapes. For example, `\u003c`
+represents `<`, so the raw JSON may contain no literal `<script` even though
+the application receives that text after parsing. Form bodies similarly encode
+named values using the percent escapes and `+` convention you've seen in queries.
+
+Inspect those decoded values to see the content the application uses. Reject
+bodies you cannot fully inspect, rather than treating an unchecked body as clean.
 
 ### Catch a JSON-escaped script
 
@@ -41,11 +47,13 @@ Add this optional field:
 { "inspection": { "max_body_bytes": 4096 } }
 ```
 
-When configured, read no more than the limit plus one byte. Measure original
-body bytes, not decoded characters. A body larger than the limit returns HTTP
+When configured, read no more than the limit plus one byte. Measure the original
+body in bytes. A text character can occupy more than one UTF-8 byte, so character
+counts would give a different limit. A body larger than the limit returns HTTP
 `413` and `error.rule: "body_too_large"`. A body exactly at the limit remains
 eligible for inspection.
 
+The `Content-Type` header supplies the body's **media type**, or format label.
 For a nonempty body, replace the earlier raw-body inspection input with:
 
 | Media type                          | Inputs                                                                        |
@@ -54,11 +62,12 @@ For a nonempty body, replace the earlier raw-body inspection input with:
 | `application/x-www-form-urlencoded` | Each decoded parameter value, preserving repetitions                          |
 | `text/plain`                        | The decoded text                                                              |
 
-Ignore media-type case and parameters such as `; charset=utf-8`. Use the same
-one-layer percent and plus decoding as for queries. A form field without `=`
-contributes an empty value. JSON keys, numbers, booleans, and null
-do not contribute strings. Keep the path, query, and configured header inputs,
-then apply the earlier normalization to every inspection string when enabled.
+Ignore media-type case and parameters such as `; charset=utf-8`. For form
+values, use the same one-layer percent and plus decoding as for queries. A form
+field without `=` contributes an empty value. JSON keys, numbers, booleans, and
+null do not contribute strings. Keep the path, query, and configured header
+inputs, then apply the earlier normalization to every inspection string when
+enabled.
 
 ### Expected failures and forwarding
 
@@ -71,6 +80,10 @@ different values:
 | Too many bytes                                                                                                                     | `413`  | `body_too_large`   |
 | Invalid UTF-8, malformed JSON, trailing JSON data, duplicate object keys at any depth, non-JSON constants, or invalid form escapes | `400`  | `invalid_request`  |
 | Unsupported media type or a non-identity `Content-Encoding`                                                                        | `415`  | `unsupported_body` |
+
+`Content-Encoding` describes an additional transformation such as compression.
+An absent encoding or `identity` means no such transformation. This stage does
+not decompress bodies.
 
 Size checks take precedence. Empty bodies add no body inputs and need no media
 type. Without `inspection`, retain the earlier body behavior.
@@ -92,45 +105,36 @@ With normalization, the earlier `<script` rule, and body inspection enabled:
 ```
 
 Before normalization, this contributes `<script>alert(1)</script>` and `Mira`.
-Normalization changes the latter to `mira`, so block mode returns HTTP `403`
-with the denylist rule ID before reaching the origin. A form body
+Normalization changes the latter to `mira`. The decoded script matches the
+`<script` denylist term, so block mode returns HTTP `403` before the request
+reaches the origin. A form body
 `comment=%3Cscript%3E` must match too. A clean JSON body must retain its
 original whitespace and escapes when forwarded.
 
-### Library behavior
-
-**Python:** `json.loads` accepts `NaN`, `Infinity`, and `-Infinity` by default,
-and keeps only the last value for a repeated object key. Use a
-`parse_constant` callback that rejects those constants and an
-`object_pairs_hook` that rejects duplicate decoded keys in each object,
-including nested objects. For example, `"name"` and `"\u006eame"` are the
-same key. `json.loads` already rejects trailing non-whitespace data. See the
-[JSON decoder documentation](https://docs.python.org/3.14/library/json.html#standard-compliance-and-interoperability).
-
-**Go:** `json.Unmarshal` into a map loses duplicate-key information. Check
-decoded keys while reading `json.Decoder.Token` values, tracking keys
-separately for each object. A single `Decoder.Decode` call reads only one
-value. Require the next read to return `io.EOF` so a second value or trailing
-garbage is rejected, while trailing whitespace remains allowed.
-`DisallowUnknownFields` does not detect duplicate keys. See the
-[`encoding/json` documentation](https://pkg.go.dev/encoding/json).
-
 ### Tests
 
-The tester verifies that:
-
-- The JSON-escaped preview above is blocked, while clean JSON reaches the
-  application unchanged.
-- Size limits count bytes inclusively. With a four-byte limit, the UTF-8 body
-  `éé` is eligible, while `ééa` returns HTTP `413`.
-- Form decoding and structured-body parsing produce the exact detector inputs.
-- Invalid bodies and unsupported encodings receive the specified errors.
-- Empty bodies add no body inputs and require no media type.
+The tester checks the escaped preview and clean JSON above, and observes the
+strings sent to the detector for each supported body format. It also checks
+validation failures and byte boundaries. With a four-byte limit, the UTF-8 body
+`éé` is eligible, while `ééa` returns HTTP `413`.
 
 ### Notes
 
 - Fixtures use UTF-8 and the declared media type. Multipart uploads, compressed
   bodies, chunked request bodies, and alternate JSON encodings are outside the
   required subset. Unsupported nonempty bodies must not be treated as inspected.
+- **Python:** `json.loads` accepts `NaN`, `Infinity`, and `-Infinity` by default
+  and keeps only the last value for a repeated object key. These defaults do not
+  satisfy this stage's validation rules. Duplicate keys are compared after
+  decoding, so `"name"` and `"\u006eame"` are the same key. The decoder's
+  `parse_constant` and `object_pairs_hook` options expose these cases. It already
+  rejects trailing non-whitespace data. See the
+  [JSON decoder documentation](https://docs.python.org/3.14/library/json.html#standard-compliance-and-interoperability).
+- **Go:** `json.Unmarshal` into a map loses duplicate-key information, and
+  `DisallowUnknownFields` does not detect duplicate keys. `json.Decoder.Token`
+  exposes individual JSON tokens. A single `Decoder.Decode` call reads only one
+  value, so its success does not establish that the complete body is valid JSON.
+  Trailing whitespace is allowed, but another value or trailing garbage is not.
+  See the [`encoding/json` documentation](https://pkg.go.dev/encoding/json).
 - See the [JSON specification](https://www.rfc-editor.org/rfc/rfc8259.html) and
   [form-encoding definition](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).

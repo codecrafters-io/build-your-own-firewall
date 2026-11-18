@@ -1,13 +1,19 @@
-In this stage, you'll block matching attack rules or report their matches in log
-mode.
+Your proxy currently forwards application requests without inspecting them.
+In this stage, you'll block requests that match configured attack rules, or
+report matches while forwarding in log mode.
 
 ### Why block before forwarding?
 
-Unescaped user input in HTML can run code in another user's browser: a
-Cross-Site Scripting (XSS) attack. Blocking recognizable patterns can catch some
-attempts, but the application still needs to escape input correctly. Rules can
-also match legitimate discussions of HTML, so `log` mode lets you observe
-matches before enforcing them.
+HTML describes the content a browser displays and can include executable scripts.
+If an application inserts user input directly into HTML, a submitted `<script>`
+tag can become code that runs in another user's browser. This is a **cross-site
+scripting (XSS)** attack. Escaping input for its HTML context makes the browser
+treat it as text.
+
+Blocking recognizable patterns before forwarding can stop some attempts from
+reaching the application. The application still needs to escape input correctly.
+Rules can also match legitimate discussions of HTML, so `log` mode lets you
+observe matches before enforcing them.
 
 ### Block an unsafe preview
 
@@ -43,7 +49,10 @@ with body `Hello` must still return `200` with `Preview: Hello` in the HTML.
 
 ### Policy and inspection inputs
 
-Read the file supplied by `--policy` at startup:
+The trusted policy file defines which text to match and what to do about it.
+A **denylist** is a list of forbidden patterns. In this stage each rule supplies
+a literal `term` and an `id` used to identify a match. Read the file supplied by
+`--policy` at startup:
 
 ```json
 {
@@ -59,6 +68,10 @@ For now, inspect two strings independently: the raw request target (path plus
 query) and the request body interpreted as UTF-8 text. A match is a literal,
 case-sensitive substring within either string. Do not combine their boundaries
 or decode percent escapes yet. Read rule IDs and terms from policy.
+
+UTF-8 is an encoding that represents text characters as bytes. Decoding the
+body as UTF-8 gives you a string to inspect. Keep the original bytes for
+forwarding, as in the previous stage.
 
 - **Matching order:** Evaluate `denylist` rules in policy order. The first rule
   whose `term` appears in either inspection string wins, regardless of which
@@ -91,13 +104,10 @@ content or let a clean request inherit an earlier match.
 
 ### Tests
 
-The tester verifies that:
-
-- The attack preview returns HTTP `200` in log mode and HTTP `403` with
-  `{"error":{"rule":"xss-script"}}` in block mode. Both responses carry
-  `X-WAF-Match: xss-script`, and only the log-mode request reaches the application.
-- A clean preview returns HTTP `200` without inheriting an earlier match header.
-- Rules match case-sensitively and follow policy order.
+The tester compares the unsafe preview in log and block modes and checks that
+the clean preview still works. It checks both the client response and whether
+the application received the request, including rule-order and case-sensitive
+matches.
 
 ### Notes
 

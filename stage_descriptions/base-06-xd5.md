@@ -1,11 +1,18 @@
-In this stage, you'll call an ML detector and enforce a policy cutoff on its
-score.
+Your firewall can score the patterns listed in policy. In this stage, you'll
+also call a supplied machine-learning (ML) detector and apply a cutoff to its
+score, so detection can use evidence beyond those hand-written rules.
 
 ### Why add a detector?
 
-Signature rules recognize configured patterns. A learned detector supplies
-another signal, but can be wrong or unavailable. Integrate it with a deadline
-and an explicit fallback.
+The literal patterns you've been matching are often called **signatures**.
+Machine learning builds a scoring model from examples. This detector was trained
+on attack and legitimate text, and its **classifier** assigns new inputs a
+suspicion score. Using the trained model to score an input is called **inference**.
+
+The model is supplied and frozen, so its learned parameters stay fixed during
+the challenge. Your task is to call it and decide how its result affects the
+firewall. It can misclassify a request or be unavailable, so the integration
+needs a deadline and an explicit fallback. You do not need to train a model.
 
 ### Detect a probe without a rule match
 
@@ -30,8 +37,9 @@ or sleep operation for this probe.
 
 ### Detector contract
 
-The detector needs inspection strings, not the client's application credentials.
-Scoring even known rule matches lets you compare model evidence with your rules.
+The detector scores inspection strings through its own HTTP interface. It must
+not inherit the client's HTTP authentication headers. Scoring even known rule
+matches lets you compare model evidence with your rules.
 
 With `classifier` configured, make exactly one `POST` to `<detector>/classify`
 for each inspected request, including requests matching earlier rules. Use
@@ -42,13 +50,13 @@ for each inspected request, including requests matching earlier rules. Use
 ```
 
 For the probe above, these inputs are the decoded path, query value, and empty
-body, with no inspected headers. The trailing `""` represents the empty body,
-not an extra placeholder to append.
+body, with no inspected headers. The trailing `""` represents the empty body.
+Do not append another placeholder.
 
 Send the current separate inspection strings, using normalized forms when
 enabled. Input ordering may vary. Preserve every input and its boundary. Send
 configured header inspection values inside `inputs`, but do not copy the
-client's HTTP headers, authentication, or policy into the detector request.
+client's HTTP headers onto the detector request or include policy in its body.
 
 Health checks and requests rejected during input validation make no detector
 call and include no detector diagnostic headers. An origin `400` response is
@@ -99,34 +107,13 @@ responses and `403` blocks. Do not forward them upstream to the origin.
 Keep heuristic diagnostics. For forwarded traffic, preserve request and response
 body bytes and follow the earlier proxy header rules.
 
-### Library behavior
-
-**Python:** `http.client.HTTPConnection(timeout=0.2)` limits blocking socket
-operations, not the total request duration. A detector sending one byte at a
-time can keep header or body reads alive past the deadline. A
-`ThreadPoolExecutor` used in a `with` block also waits for running work when
-the block exits, even if `future.result(timeout=0.2)` has raised a timeout.
-Enforce one deadline measured with a monotonic clock across connection,
-headers, and body, and ensure timeout cleanup does not wait for the slow
-detector before continuing with fallback. See the
-[`HTTPConnection` timeout](https://docs.python.org/3.14/library/http.client.html#http.client.HTTPConnection)
-and [executor shutdown](https://docs.python.org/3.14/library/concurrent.futures.html#concurrent.futures.Executor.shutdown)
-documentation.
-
 ### Tests
 
-The tester verifies that:
-
-- The probe above is blocked with `ml_score`, and a clean search still succeeds.
-- Exact cutoffs and zero scores work with scripted detector responses. A score
-  of `70` with cutoff `70` blocks with `ml_score`.
-- Denylist matches still trigger a detector call.
-- Invalid responses, redirects, errors, and incomplete replies trigger fallback.
-  If the detector returns `503`, an otherwise unmatched request reaches the origin.
-- The complete detector call respects the 200 ms deadline, including trickled
-  header and body bytes.
-
-Scripted responses check integration and fallback independently of model quality.
+The tester checks the probe and clean search above with the supplied model.
+Scripted detector responses separately check the protocol, inclusive cutoffs,
+and fallback. For example, a score of `70` meets cutoff `70`, while a `503`
+response makes detection unavailable. Slow replies check the total deadline,
+including when headers or body bytes arrive a little at a time.
 
 ### Notes
 
@@ -136,6 +123,15 @@ Scripted responses check integration and fallback independently of model quality
 - Scripted detector scores test your integration and policy behavior. They do
   not measure the supplied model's detection accuracy. The detector is a trusted
   service that receives inspection content.
-- Modern WAFs combine ML scores and rules. See
+- **Python:** `http.client.HTTPConnection(timeout=0.2)` limits individual
+  blocking socket operations. It does not bound the total request duration.
+  A detector sending one byte at a time can keep reads alive past the deadline.
+  A `ThreadPoolExecutor` used in a `with` block also waits for running work on
+  exit, even after `future.result(timeout=0.2)` raises a timeout. Timeout cleanup
+  must not wait for a slow detector before fallback can continue. See the
+  [`HTTPConnection` timeout](https://docs.python.org/3.14/library/http.client.html#http.client.HTTPConnection)
+  and [executor shutdown](https://docs.python.org/3.14/library/concurrent.futures.html#concurrent.futures.Executor.shutdown)
+  documentation.
+- For an example of a WAF using learned scores with rules, see
   [Cloudflare's attack-score documentation](https://developers.cloudflare.com/waf/detections/attack-score/).
   Its score convention differs: lower scores indicate greater risk.

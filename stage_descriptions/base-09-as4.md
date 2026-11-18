@@ -1,5 +1,6 @@
-In this stage, you'll withhold responses that expose a protected pattern or
-exceed the inspection limit.
+Your proxy already reads complete origin responses before releasing them.
+In this stage, you'll add a size limit and inspect their contents, withholding
+responses that expose a protected pattern or exceed that limit.
 
 ### Why inspect responses before release?
 
@@ -50,7 +51,8 @@ Add an optional `response` object:
 ```
 
 The regular-expression syntax is the same subset used by heuristic signals.
-These patterns are trusted policy, not values supplied by the client or origin.
+The trusted policy supplies these patterns. Clients and origins cannot choose
+which patterns your firewall enforces.
 
 ### Expected behavior
 
@@ -64,17 +66,26 @@ sending anything to the client.
 | A deny pattern matches   | HTTP `403`, `error.rule: "response_leak"`                |
 | Neither condition        | Original status, exact body bytes, and preserved headers |
 
-Size takes precedence over pattern inspection. Search the body decoded as UTF-8,
-replacing invalid byte sequences for inspection only. When the body is valid
-JSON, also search each decoded string, including object keys, at every nesting
-depth and across duplicate-key values: JSON escapes can hide a secret from
-raw-text matching. Nonstandard constants such as `NaN` and `Infinity` make the
-body invalid JSON. Raw-text inspection is still required in that case. You may
-also inspect strings decoded by a lenient JSON parser.
-Malformed or non-JSON bodies also use raw-text inspection rather than a
-JSON-validation denial. Do not join separate strings or normalize,
-percent-decode, or base64-decode response content. An allowed response retains
-its original body bytes, including any invalid UTF-8.
+Size takes precedence over pattern inspection. Decode the body as UTF-8 for
+inspection, replacing invalid byte sequences with the Unicode replacement
+character. Search that text for each deny pattern. These replacements affect
+only the inspection copy.
+
+When the body is valid JSON, also search each decoded string, including object
+keys and values at every nesting depth. JSON escapes can hide a secret from
+raw-text matching. Inspect every occurrence of a duplicate key and its value.
+Unlike request validation, response inspection does not reject duplicates just
+because they are duplicates.
+
+Malformed JSON and non-JSON bodies still receive raw-text inspection. They do
+not trigger a JSON-validation denial, since a legitimate response can be an
+HTML page or plain text. Nonstandard constants such as `NaN` and `Infinity`
+also make the body invalid JSON. You may additionally inspect strings decoded
+by a lenient JSON parser, but raw-text inspection remains required.
+
+Keep strings separate and match response content without normalization,
+percent decoding, or base64 decoding. An allowed response retains its original
+body bytes, including any invalid UTF-8.
 
 For either denial, send `Content-Type: application/json`, the corresponding
 `X-WAF-Match`, and the standard error shape. Release no origin bytes or origin
@@ -92,36 +103,13 @@ An incomplete origin response still returns HTTP `502` with
 `error.rule: "origin_unavailable"`. Buffering within the size limit does not
 make a truncated body safe to release.
 
-### Library behavior
-
-**Python:** Default `json.loads` keeps only the last value for a repeated key.
-Use `object_pairs_hook` to preserve every key-value pair for inspection,
-including decoded keys and values in nested objects. For example,
-`{"debug":"\u0049NTERNAL_KEY_7F2A","debug":"clean"}` must still be blocked.
-A `parse_constant` callback can reject `NaN` and infinities for the valid-JSON
-inspection path. If parsing fails, still scan the raw text. A clean response
-containing `NaN` must pass unchanged. See the
-[JSON decoder documentation](https://docs.python.org/3.14/library/json.html#standard-compliance-and-interoperability).
-
-**Go:** Unmarshalling into a map can hide earlier duplicate-key values.
-`json.Decoder.Token` exposes every decoded string, including object keys and
-repeated values. `json.Valid` can check that the complete body is valid JSON
-before token inspection. One successful `Decoder.Decode` does not establish
-that no trailing data remains. Keep raw-text inspection when JSON validation
-fails. See the [`encoding/json` documentation](https://pkg.go.dev/encoding/json).
-
 ### Tests
 
-The tester verifies that:
-
-- The debug response above is withheld before any origin content escapes.
-- Escaped JSON values and keys, including `"\u0049NTERNAL_KEY_7F2A"`, are caught
-  after decoding. Duplicate-key values are also inspected.
-- Nonstandard JSON constants use raw-text fallback, and invalid UTF-8 is inspected
-  as specified.
-- Oversized responses are withheld, and response denials replace log-mode matches.
-- Clean responses pass unchanged when they fit the size limit, including a body
-  containing only the partial marker `INTERNAL_`.
+The tester checks the debug response above and varies how protected content is
+represented, including escaped JSON keys and repeated values. It also checks
+size limits, raw-text fallback, and log-mode enforcement. Clean responses must
+pass unchanged within the limit, including a body containing only the partial
+marker `INTERNAL_`.
 
 ### Notes
 
@@ -131,6 +119,18 @@ The tester verifies that:
   requires a different release strategy and is proposed as an extension.
   Patterns match only the protected representations specified here. They are not
   a guarantee against every possible data leak.
+- **Python:** Default `json.loads` keeps only the last value for a repeated key.
+  For example, `{"debug":"\u0049NTERNAL_KEY_7F2A","debug":"clean"}` must still
+  be blocked. The decoder's `object_pairs_hook` exposes all pairs, and
+  `parse_constant` controls its handling of `NaN` and infinities. A clean
+  response containing `NaN` must pass unchanged. See the
+  [JSON decoder documentation](https://docs.python.org/3.14/library/json.html#standard-compliance-and-interoperability).
+- **Go:** Unmarshalling into a map can hide earlier duplicate-key values.
+  `json.Decoder.Token` exposes decoded strings, including object keys and
+  repeated values. `json.Valid` checks a complete body's JSON syntax. One
+  successful `Decoder.Decode` does not establish that no trailing data remains.
+  Keep raw-text inspection when JSON validation fails. See the
+  [`encoding/json` documentation](https://pkg.go.dev/encoding/json).
 - The
   [OWASP CRS scoring overview](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/)
   also distinguishes request and response enforcement.

@@ -2,7 +2,12 @@ slug: firewall
 name: Build your own Firewall
 short_name: Firewall
 release_status: alpha
-description_md: Build an inbound HTTP firewall that protects a web application. Start with a working reverse proxy, then add attack rules, evasion handling, machine-learning scores, and resource limits. Finish by virtually patching a vulnerable endpoint while keeping legitimate requests working.
+description_md: |-
+  How can a harmless-looking web request expose private data?
+
+  An application can export private fields simply because a client requests them. You'll build a web application firewall (WAF) that inspects requests before forwarding them to an application. It combines attack rules with a supplied machine-learning detector, limits body sizes, withholds protected response data, and restricts exports when generic detection misses the flaw.
+
+  You'll practice HTTP proxying, decoding inputs without rewriting traffic, and tuning detection thresholds while keeping legitimate requests working. This teaching implementation covers a limited HTTP subset.
 short_description_md: Stop web attacks without breaking legitimate traffic. Build a reverse proxy, add ML detection, and patch a vulnerable endpoint.
 completion_percentage: 5
 languages:

@@ -1,15 +1,26 @@
-In this stage, you'll inspect decoded, normalized request inputs without
-changing forwarded traffic.
+Your rules currently inspect the raw target and body. In this stage, you'll
+inspect decoded, normalized inputs so an encoded spelling can match the same
+rule. Forwarded traffic must keep its original bytes.
 
 ### Why normalize only the inspection view?
 
-An application may decode inputs that raw-byte rules miss. An _inspection view_
-is a transformed copy used for matching. Forward the original bytes: rewriting
-them can change a request's meaning or break a signature. This course uses a
-fixed pipeline. Production inspection must reflect the application's actual
-input handling.
+An application may decode inputs that raw-text rules miss. An **inspection view**
+is a transformed copy used for matching. Forward the original bytes, because
+rewriting them can change what the application receives. It can also break a
+request signature, which checks that the original bytes have not changed.
+
+URL **percent encoding** writes a byte as `%` followed by two hexadecimal digits.
+For example, `%3C` represents `<` in UTF-8. Query values also use `+` to represent
+a space. Decoding exposes the text the application will use. **Normalization**
+then puts equivalent text forms into a common representation for matching.
+This course defines a fixed set of transformations. Production inspection must
+reflect the application's actual input handling.
 
 ### Catch an encoded search
+
+SQL is a language for querying databases. A **SQL injection** occurs when user
+input changes the instructions in a vulnerable application's query.
+`UNION SELECT` can combine additional query results with the intended results.
 
 The search route decodes query values once and treats `+` as a space. It
 simulates a leaked private row when the decoded query contains `union select`.
@@ -47,10 +58,11 @@ The tester then requests `q=tea+cup`. It must still return HTTP `200` with
 
 ### The inspection view
 
-Extra decoding can make harmless text look like an attack: the search application
-decodes `%253Cscript` once to `%3Cscript`, not `<script`. Joining separate inputs
-can likewise invent a match, such as `union` in one parameter and ` select` in
-another. Decode once and inspect inputs separately.
+Extra decoding can make harmless text look like an attack. The search application
+decodes `%253Cscript` once to `%3Cscript`. A second decoding would turn that into
+`<script`, a different input. Joining separate inputs can likewise invent a
+match, such as `union` in one parameter and ` select` in another. Decode once
+and inspect inputs separately.
 
 Add these optional policy fields:
 
@@ -90,10 +102,12 @@ rejected by the HTTP server itself.
 Inspect each occurrence of a configured header as a separate input. Do not split
 a header value on commas.
 
-NFKC combines compatibility forms such as full-width letters. Case folding
-handles caseless matching, including `Straße` -> `strasse`. For every inspection
-input, apply **Unicode NFKC normalization, then case folding**. Policy terms are
-already in this canonical form.
+Unicode gives characters standardized representations. **NFKC** is a Unicode
+normalization form that maps compatibility variants, such as full-width letters,
+to a common form. **Case folding** removes case distinctions for matching,
+including `Straße` -> `strasse`. With normalization enabled, every inspection
+input receives **Unicode NFKC normalization, then case folding**. Policy terms
+are already in this canonical form, so they can be compared directly.
 
 ### Expected behavior
 
@@ -121,38 +135,11 @@ With the policy above:
 In log mode, even a matching encoded request must reach the origin with its
 original bytes.
 
-### Library behavior
-
-**Python:** `urllib.parse.unquote` leaves malformed escapes such as `%ZZ`
-unchanged and replaces invalid UTF-8 such as `%FF` by default. Validate that
-every `%` in the original component is followed by two hexadecimal digits,
-then decode with `encoding="utf-8", errors="strict"`. Strict decoding alone
-does not reject `%ZZ`. Use `unquote` for paths and `unquote_plus` for query
-components so `+` has the required meaning. See the
-[URL-decoding documentation](https://docs.python.org/3.14/library/urllib.parse.html#urllib.parse.unquote).
-
-**Go:** `r.URL.Path` is already percent-decoded. Decoding it again would
-violate the one-layer rule. `url.QueryUnescape` reports malformed escapes,
-but its result still needs a `utf8.ValidString` check. Validate the decoded
-path's UTF-8 too. `r.URL.Query()` silently drops malformed pairs and does not
-distinguish bare parameters from empty values. Split `r.URL.RawQuery` as
-described above and check decoding errors for both names and values. See the
-[`net/url` documentation](https://pkg.go.dev/net/url).
-
 ### Tests
 
-The tester verifies that:
-
-- The encoded `union+select` search returns HTTP `403` with
-  `X-WAF-Match: sql-union` and `{"error":{"rule":"sql-union"}}`, without
-  reaching the application.
-- The clean `q=tea+cup` search returns HTTP `200` with
-  `{"results":[{"item":"tea cup"}]}`.
-- Inspection applies one-layer decoding, Unicode normalization, and case folding
-  to independent inputs.
-- Bare query parameters, names in `name=value` pairs, and invalid encodings are
-  handled as specified.
-- Log-mode traffic reaches the application unchanged.
+The tester compares the encoded attack and clean search above. Other requests
+check that decoding and normalization respect input boundaries, malformed
+encodings are rejected, and log-mode traffic reaches the origin unchanged.
 
 ### Notes
 
@@ -161,6 +148,18 @@ The tester verifies that:
 - JSON escapes and form-encoded bodies are handled in later stages. This stage
   inspects bare query parameters, but not names in `name=value` pairs or
   arbitrary headers. Unlisted representations can still evade a rule.
+- **Python:** `urllib.parse.unquote` leaves malformed escapes such as `%ZZ`
+  unchanged and replaces invalid UTF-8 such as `%FF` by default. Its
+  `encoding="utf-8", errors="strict"` options reject invalid UTF-8, but do not
+  reject `%ZZ`. `unquote_plus` additionally turns `+` into a space. Keep these
+  differences in mind when validating each original component. See the
+  [URL-decoding documentation](https://docs.python.org/3.14/library/urllib.parse.html#urllib.parse.unquote).
+- **Go:** `r.URL.Path` is already percent-decoded. Decoding it again would
+  violate the one-layer rule. `url.QueryUnescape` reports malformed escapes,
+  but does not validate UTF-8. `utf8.ValidString` checks that separately.
+  `r.URL.Query()` silently drops malformed pairs and loses the distinction
+  between bare parameters and empty values. `r.URL.RawQuery` retains the
+  original query. See the [`net/url` documentation](https://pkg.go.dev/net/url).
 - Read more about [Unicode normalization](https://www.unicode.org/reports/tr15/)
   and
   [URL encoding](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).

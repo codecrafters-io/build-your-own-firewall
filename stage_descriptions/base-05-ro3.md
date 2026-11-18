@@ -1,11 +1,15 @@
-In this stage, you'll combine weighted attack signals into one request score.
+Your denylist treats each match as sufficient evidence to block. In this stage,
+you'll also combine weaker attack signals into one request score, so several
+different clues can reach a blocking threshold together.
 
 ### Why combine weak signals?
 
 In a vulnerable SQL query, `OR 1=1` can make a condition always true, while `--`
 can comment out the remaining SQL. Either fragment can also appear in legitimate
-discussions. **Anomaly scoring** combines their weights: `3 + 2 = 5` reaches the
-policy's threshold. The score measures matched signals, not attack probability.
+discussions. **Anomaly scoring** gives each configured signal a weight and adds
+the weights of matching signals. A **threshold** is the cutoff for selecting a
+match. Here, `3 + 2 = 5` reaches the policy's threshold. The score summarizes
+matched signals. It does not estimate the probability of an attack.
 
 ### Stop a private-row leak
 
@@ -27,8 +31,8 @@ Your firewall must return HTTP `403`, `X-WAF-Score: 5`,
 ```
 
 The application must receive no forwarded attack. A clean `q=tea+cup` search
-still returns `200` with product results. These are simulated SQL-injection
-consequences, not executed SQL.
+still returns `200` with product results. The application simulates these
+SQL-injection consequences without executing SQL.
 
 ### Policy
 
@@ -50,9 +54,15 @@ Add an optional `heuristics` object alongside earlier fields:
 }
 ```
 
-Each pattern is a regular expression searched anywhere within each current
-inspection input. Use the normalized inputs when normalization is enabled. A
-pattern cannot span input boundaries.
+Each pattern is a **regular expression**, which describes a family of matching
+strings. For example, a character class in square brackets matches one of its
+listed characters. `+` repeats the preceding class one or more times, and `*`
+allows zero or more repetitions. This lets the `sql-or` pattern recognize
+different spacing around the same SQL fragment.
+
+Search each pattern anywhere within each current inspection input. Use the
+normalized inputs when normalization is enabled. A pattern cannot span input
+boundaries.
 
 Use explicit character classes for whitespace. The example's `[ \t\n\f\r]`
 matches only space, tab, line feed, form feed, and carriage return. Vertical tab
@@ -107,18 +117,9 @@ and the response reports `X-WAF-Match: heuristic_score`.
 
 ### Tests
 
-The tester verifies that:
-
-- The `or 1=1 --` search returns HTTP `403` with
-  `{"error":{"rule":"heuristic_score"}}`, `X-WAF-Score: 5`, and
-  `X-WAF-Signals: sql-or,sql-comment` in either signal order. The attack never
-  reaches the application.
-- A clean search returns HTTP `200` with clean-request diagnostics.
-- Repeated signal matches count only once. Missing, repeated, or extra signal
-  IDs fail; either ID order is accepted.
-- Denylist matches take precedence while retaining the full heuristic score and
-  all fired signal IDs.
-- Whitespace matching uses the same characters in Go and Python.
+The tester checks the attack and clean search above, then varies signal
+repetition, input boundaries, and whitespace. It verifies the complete score
+and fired IDs on client responses, including when a denylist rule wins.
 
 ### Notes
 
@@ -127,8 +128,7 @@ The tester verifies that:
   `re`, without flags or backreferences. Whitespace shorthands `\s` and `\S`
   are outside this shared subset because their character sets differ by
   language. Use explicit classes instead.
-- The patterns are small teaching examples, not a complete SQL injection
-  detector.
+- These small teaching patterns do not form a complete SQL injection detector.
 - The
   [OWASP CRS anomaly-scoring documentation](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/)
   explains the broader separation of detection and enforcement.

@@ -1,5 +1,6 @@
-In this stage, you'll forward HTTP requests and responses between a client and
-the protected application.
+Your firewall can answer its own health checks. In this stage, you'll forward
+other HTTP requests to the protected application and return its responses to
+the client.
 
 ### Why proxy requests first?
 
@@ -11,6 +12,23 @@ inspection.
 Client -- GET /search?q=tea+cup --> Firewall --> Origin
 Client <-- 200 + response body -- Firewall <-- Origin
 ```
+
+### The parts of an HTTP exchange
+
+A request's **method** describes the operation, such as `GET` to retrieve data
+or `POST` to submit it. Its **target** identifies what the client is requesting.
+Here, `/search?q=tea+cup` contains the path `/search` and a query string after
+`?`. The query parameter `q` supplies the search value.
+
+Requests and responses can also contain **headers**, named metadata such as
+`Content-Type: application/json`, and a **body** containing the data being sent.
+A response adds a status code telling the client what happened. For example,
+`200` means success, while `400` reports a bad request.
+
+Your firewall uses two separate connections: the client connects to the
+firewall, and the firewall connects to the origin. Headers that describe the
+application data must survive that transfer. Connection-specific headers need
+different treatment, as described below.
 
 ### Forward a search and an article
 
@@ -37,6 +55,10 @@ curl --include http://127.0.0.1:8080/articles \
   -H 'Content-Type: text/plain' --data-binary 'My first article'
 ```
 
+`--data-binary` supplies the request body and makes this a `POST`. The `-H`
+option supplies a header. `--include` displays the response headers alongside
+the body.
+
 Expect HTTP `200` and:
 
 ```json
@@ -49,17 +71,25 @@ Forward `GET`, `POST`, `PUT`, `PATCH`, and `DELETE` requests to `--origin`,
 keeping `/health` local. Append the original request path and query string to
 the supplied origin URL.
 
+**End-to-end headers** describe the request or response across the proxy, such
+as its content type or authorization credentials. The `Host` request header
+identifies the destination server. **Framing** tells the receiver where the
+body ends. For example, `Content-Length` specifies its length in bytes.
+
 | Direction | Preserve                                                                                              | Adjust                                                    |
 | --------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | Request   | Method, path, query, body bytes, and end-to-end headers, including `Authorization` and `Content-Type` | The upstream `Host` must name the origin host and port.   |
 | Response  | Status, body bytes, and end-to-end headers, including `Content-Type` and `X-Request-Id`               | Framing headers must describe the body you actually send. |
 
 Preserve JSON whitespace and escaping, empty bodies, and unknown fields.
+Equivalent-looking JSON can have different bytes, so parsing and recreating a
+body can violate this requirement.
 
 Relay origin HTTP error and redirect responses. A redirect instructs the
 client to make another request. Do not follow it inside the firewall.
 
-Buffering lets you replace a failed response before any origin content escapes.
+**Buffering** means holding a response until it has been read completely.
+This lets you replace a failed response before any origin content escapes.
 Later, it will also let you check responses for secrets.
 
 Read the complete origin response body before sending its status, headers, or
@@ -95,15 +125,11 @@ Preserve all remaining application headers.
 
 ### Tests
 
-The tester verifies that:
-
-- The search and article requests above return the expected application responses.
-- All five methods preserve request bytes and application headers.
-- Origin error and redirect responses are relayed unchanged. An origin `400`
-  remains `400`.
-- Connection-specific and reserved headers are removed in both directions.
-- Incomplete responses and an unavailable origin produce the specified `502`
-  without releasing origin content.
+The tester compares the search and article responses above with direct requests
+to the application. It also checks forwarding for all five methods, header
+handling, and the `502` response when the origin is unavailable or its reply is
+incomplete. It observes what reaches the origin as well as what the client
+receives.
 
 ### Notes
 
