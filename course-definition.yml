@@ -7,7 +7,7 @@ description_md: |-
 
   You'll build a reverse proxy that reads each request the way the application does and inspects what the application returns. It forwards bytes unchanged, and it blocks requests that match a rule or cross a per-route threshold. A supplied detector adds a machine-learning score. Later stages inspect bodies and responses within size limits and patch a vulnerable endpoint without breaking legitimate traffic.
 
-  You'll practice byte-exact proxying, one-layer decoding, tuning thresholds per route, and falling back to rules when the detector fails.
+  You'll practice decoding inputs exactly once, normalizing Unicode before matching, and keeping protection working when the model fails.
 short_description_md: Stop web attacks without breaking legitimate traffic. Build a reverse proxy, add ML detection, and patch a vulnerable endpoint.
 completion_percentage: 5
 languages:
