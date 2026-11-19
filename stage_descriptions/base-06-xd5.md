@@ -30,7 +30,8 @@ or sleep operation for this probe.
 
 ### Detector contract
 
-The detector needs inspection strings, not the client's application credentials.
+The detector needs inspection strings. Do not send the client's application
+credentials.
 Scoring even known rule matches lets you compare model evidence with your rules.
 
 With `classifier` configured, make exactly one `POST` to `<detector>/classify`
@@ -102,8 +103,8 @@ body bytes and follow the earlier proxy header rules.
 ### Library behavior
 
 **Python:** `http.client.HTTPConnection(timeout=0.2)` limits blocking socket
-operations, not the total request duration. A detector sending one byte at a
-time can keep header or body reads alive past the deadline. A
+operations. It does not bound the total request duration. A detector sending one
+byte at a time can keep header or body reads alive past the deadline. A
 `ThreadPoolExecutor` used in a `with` block also waits for running work when
 the block exits, even if `future.result(timeout=0.2)` has raised a timeout.
 Enforce one deadline measured with a monotonic clock across connection,

@@ -42,9 +42,9 @@ Add this optional field:
 ```
 
 When configured, read no more than the limit plus one byte. Measure original
-body bytes, not decoded characters. A body larger than the limit returns HTTP
-`413` and `error.rule: "body_too_large"`. A body exactly at the limit remains
-eligible for inspection.
+body bytes. Decoded characters do not count toward the limit. A body larger than
+the limit returns HTTP `413` and `error.rule: "body_too_large"`. A body exactly
+at the limit remains eligible for inspection.
 
 For a nonempty body, replace the earlier raw-body inspection input with:
 

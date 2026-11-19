@@ -84,10 +84,10 @@ to the origin.
 Every firewall-generated error uses `Content-Type: application/json` and the
 preview example's error shape, containing only the `error` object and its
 `rule` field. JSON whitespace and string escaping may vary. Set both
-`error.rule` and `X-WAF-Match` to its identifier, even when no denylist matched.
-For example, a forwarding failure replaces the origin response with
+`error.rule` and `X-WAF-Match` to the same rule ID, even when no denylist rule
+matched. A forwarding failure, for example, replaces the origin response with
 `origin_unavailable`. Later errors follow this convention. Never echo request
-content or let a clean request inherit an earlier match.
+content, and never let a clean request inherit an earlier match.
 
 ### Tests
 

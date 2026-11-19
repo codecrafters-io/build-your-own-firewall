@@ -1,11 +1,12 @@
-In this stage, you'll start an HTTP server that answers health checks on port
-`8080`.
+A health check tells the caller whether the firewall is running, even when the
+protected application is unavailable. In this stage, you'll start an HTTP server
+that answers those checks on port `8080`.
 
 ### Why start with health checks?
 
 Your firewall will stand between external clients and a protected web
-application. A health check tells the caller whether the firewall is running,
-even when that application is unavailable.
+application. Answering `/health` locally is the first behavior a caller can
+reach, and it must work before you forward anything.
 
 ```text
 External client -> Your firewall -> Application server
@@ -27,7 +28,7 @@ contents.
 
 The application is also called the **origin**: it is the server your firewall
 will forward requests to. The detector is a separate service that scores
-inspection inputs in later stages.
+requests in later stages.
 
 Service addresses and policy paths vary between runs. The starter accepts three
 flags so the caller can supply them. Keep this interface throughout the challenge:
@@ -48,8 +49,8 @@ and path:
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-Service addresses and the absolute policy path vary between runs. From the next
-stage onward, the tester also starts the application and detector.
+From the next stage onward, the tester also starts the application and
+detector.
 
 For this stage, the tester uses an empty policy (`{}`) and verifies that:
 

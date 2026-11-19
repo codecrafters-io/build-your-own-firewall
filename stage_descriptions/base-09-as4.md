@@ -50,13 +50,14 @@ Add an optional `response` object:
 ```
 
 The regular-expression syntax is the same subset used by heuristic signals.
-These patterns are trusted policy, not values supplied by the client or origin.
+These patterns come from trusted policy. Client and origin values never define
+them.
 
 ### Expected behavior
 
-One extra byte reveals an oversized response. For every origin response,
-including error statuses, read no more than `max_bytes + 1` body bytes before
-sending anything to the client.
+Reading one byte past the limit is enough to detect an oversized response. For
+every origin response, including error statuses, read no more than
+`max_bytes + 1` body bytes before sending anything to the client.
 
 | Condition                | Client result                                            |
 | ------------------------ | -------------------------------------------------------- |
@@ -69,11 +70,10 @@ replacing invalid byte sequences for inspection only. When the body is valid
 JSON, also search each decoded string, including object keys, at every nesting
 depth and across duplicate-key values: JSON escapes can hide a secret from
 raw-text matching. Nonstandard constants such as `NaN` and `Infinity` make the
-body invalid JSON. Raw-text inspection is still required in that case. You may
-also inspect strings decoded by a lenient JSON parser.
-Malformed or non-JSON bodies also use raw-text inspection rather than a
-JSON-validation denial. Do not join separate strings or normalize,
-percent-decode, or base64-decode response content. An allowed response retains
+body invalid JSON, and a malformed body is never denied for its syntax. Both
+cases still get raw-text inspection. You may also inspect strings decoded by a
+lenient JSON parser. Do not join separate strings or normalize, percent-decode,
+or base64-decode response content. An allowed response retains
 its original body bytes, including any invalid UTF-8.
 
 For either denial, send `Content-Type: application/json`, the corresponding

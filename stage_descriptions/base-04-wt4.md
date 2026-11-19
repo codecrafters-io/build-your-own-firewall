@@ -47,10 +47,11 @@ The tester then requests `q=tea+cup`. It must still return HTTP `200` with
 
 ### The inspection view
 
-Extra decoding can make harmless text look like an attack: the search application
-decodes `%253Cscript` once to `%3Cscript`, not `<script`. Joining separate inputs
-can likewise invent a match, such as `union` in one parameter and ` select` in
-another. Decode once and inspect inputs separately.
+Extra decoding can make harmless text look like an attack. The search
+application decodes `%253Cscript` once to `%3Cscript`, while a firewall that
+decoded twice would see `<script`. Joining separate inputs can likewise invent a
+match, such as `union` in one parameter and ` select` in another. Decode once and
+inspect inputs separately.
 
 Add these optional policy fields:
 
