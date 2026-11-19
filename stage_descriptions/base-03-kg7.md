@@ -58,8 +58,8 @@ Read the file supplied by `--policy` at startup:
 For now, inspect two strings independently: the raw request target (path plus
 query) and the request body interpreted as UTF-8 text. A match is a literal,
 case-sensitive substring within either string, so a term must use the same
-casing as the traffic it targets. The lower-case `union select` example matches
-the search route's query text. Do not combine their boundaries
+casing as the traffic it targets. A policy term is an arbitrary string that
+must match the request bytes, not SQL syntax. Do not combine their boundaries
 or decode percent escapes yet. Read rule IDs and terms from policy.
 
 - **Matching order:** Evaluate `denylist` rules in policy order. The first rule
