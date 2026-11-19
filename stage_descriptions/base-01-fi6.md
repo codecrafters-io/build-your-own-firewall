@@ -13,7 +13,7 @@ External client -> Your firewall -> Application server
                    /health          (--origin)
 ```
 
-The tester sends this request twice. Each call should print `200`:
+The tester sends this request twice and expects `200` on each call:
 
 ```bash
 curl --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:8080/health

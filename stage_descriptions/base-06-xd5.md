@@ -30,9 +30,9 @@ or sleep operation for this probe.
 
 ### Detector contract
 
-The detector needs inspection strings. Do not send the client's application
-credentials.
-Scoring even known rule matches lets you compare model evidence with your rules.
+The detector needs the inspection inputs. Do not send the client's application
+credentials. Scoring even known rule matches lets you compare model evidence with
+your rules.
 
 With `classifier` configured, make exactly one `POST` to `<detector>/classify`
 for each inspected request, including requests matching earlier rules. Use
@@ -46,10 +46,10 @@ For the probe above, these inputs are the decoded path, query value, and empty
 body, with no inspected headers. The trailing `""` represents the empty body,
 not an extra placeholder to append.
 
-Send the current separate inspection strings, using normalized forms when
-enabled. Input ordering may vary. Preserve every input and its boundary. Send
-configured header inspection values inside `inputs`, but do not copy the
-client's HTTP headers, authentication, or policy into the detector request.
+Send the current inspection inputs, using normalized forms when enabled. Input
+ordering may vary. Preserve every input and its boundary. Send configured header
+inspection values inside `inputs`, but do not copy the client's HTTP headers,
+authentication, or policy into the detector request.
 
 Health checks and requests rejected during input validation make no detector
 call and include no detector diagnostic headers. An origin `400` response is

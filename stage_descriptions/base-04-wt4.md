@@ -4,10 +4,10 @@ changing forwarded traffic.
 ### Why normalize only the inspection view?
 
 An application may decode inputs that raw-byte rules miss. An _inspection view_
-is a transformed copy used for matching. Forward the original bytes: rewriting
-them can change a request's meaning or break a signature. This course uses a
-fixed pipeline. Production inspection must reflect the application's actual
-input handling.
+is a transformed copy used for matching, and each inspected value becomes one
+inspection input. Forward the original bytes: rewriting them can change a
+request's meaning or break a signature. This course uses a fixed pipeline.
+Production inspection must reflect the application's actual input handling.
 
 ### Catch an encoded search
 

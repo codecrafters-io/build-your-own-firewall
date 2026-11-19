@@ -105,6 +105,10 @@ The final example (`/articles` with heuristic score `5`) can still be blocked by
 the standalone heuristic cutoff if the detector fails. That difference is part
 of the specified fallback.
 
+The earlier ML-only probe scores `77` with no heuristic evidence, below the
+default `ml_high` of `90`, so it now passes. Lowering `ml_high` would catch it
+again.
+
 An allowed request must reach the origin unchanged. A combined block must return
 HTTP `403` with:
 
@@ -124,8 +128,6 @@ The tester verifies that:
   `combined_scores` while `/articles` passes under its route thresholds.
 - Denylist matches retain precedence, and detector outages use the earlier
   fallback rules.
-- The earlier ML-only probe scoring `77`, with no heuristic evidence, is allowed
-  under the combined default thresholds.
 
 Raising a cutoff can lose detection coverage. Check legitimate traffic as well
 as attack probes when tuning policy.
