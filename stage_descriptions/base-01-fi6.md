@@ -53,9 +53,8 @@ detector.
 
 For this stage, the tester uses an empty policy (`{}`) and verifies that:
 
-- `GET /health` returns HTTP `200` within five seconds of startup. The tester
-  retries while it waits, then sends further health checks, each with a
-  three-second deadline.
+- `GET /health` returns HTTP `200` within five seconds of startup and keeps
+  answering health checks afterwards. The tester retries while it waits.
 
 ### Notes
 
