@@ -108,7 +108,9 @@ and the response reports `X-WAF-Match: heuristic_score`.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. Expect HTTP `403`, `X-WAF-Score: 5`, and
+`{"error":{"rule":"heuristic_score"}}` for the scored search. The tester
+verifies that:
 
 - The `or 1=1 --` search returns HTTP `403` with
   `{"error":{"rule":"heuristic_score"}}`, `X-WAF-Score: 5`, and

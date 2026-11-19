@@ -6,7 +6,7 @@ changing forwarded traffic.
 An application may decode inputs that raw-byte rules miss. An _inspection view_
 is a transformed copy used for matching, and each inspected value becomes one
 inspection input. Forward the original bytes: rewriting them can change a
-request's meaning or break a signature. This course uses a fixed pipeline.
+request's meaning or break a signature. This challenge uses a fixed pipeline.
 Production inspection must reflect the application's actual input handling.
 
 ### Catch an encoded search
@@ -142,7 +142,9 @@ described above and check decoding errors for both names and values. See the
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. Expect HTTP `403` and
+`{"error":{"rule":"sql-union"}}` for the encoded search. The tester verifies
+that:
 
 - The encoded `union+select` search returns HTTP `403` with
   `X-WAF-Match: sql-union` and `{"error":{"rule":"sql-union"}}`, without

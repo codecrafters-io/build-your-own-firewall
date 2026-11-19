@@ -91,7 +91,9 @@ content, and never let a clean request inherit an earlier match.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. Expect HTTP `403` and
+`{"error":{"rule":"xss-script"}}` for the block-mode preview. The tester
+verifies that:
 
 - The attack preview returns HTTP `200` in log mode and HTTP `403` with
   `{"error":{"rule":"xss-script"}}` in block mode. Both responses carry

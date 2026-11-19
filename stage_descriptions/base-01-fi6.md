@@ -1,12 +1,11 @@
-A health check tells the caller whether the firewall is running, even when the
-protected application is unavailable. In this stage, you'll start an HTTP server
-that answers those checks on port `8080`.
+In this stage, you'll start an HTTP server that answers health checks on port
+`8080`, so callers can tell the firewall is running before it forwards anything.
 
 ### Why start with health checks?
 
 Your firewall will stand between external clients and a protected web
-application. Answering `/health` locally is the first behavior a caller can
-reach, and it must work before you forward anything.
+application. A health check is the smallest behavior that proves the firewall is
+up, independent of the application behind it.
 
 ```text
 External client -> Your firewall -> Application server
@@ -49,7 +48,7 @@ and path:
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-From the next stage onward, the tester also starts the application and
+In later stages, the tester also starts the application and
 detector.
 
 For this stage, the tester uses an empty policy (`{}`) and verifies that:

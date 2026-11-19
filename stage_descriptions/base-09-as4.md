@@ -59,11 +59,12 @@ Reading one byte past the limit is enough to detect an oversized response. For
 every origin response, including error statuses, read no more than
 `max_bytes + 1` body bytes before sending anything to the client.
 
-| Condition                | Client result                                            |
-| ------------------------ | -------------------------------------------------------- |
-| Body exceeds `max_bytes` | HTTP `502`, `error.rule: "response_too_large"`           |
-| A deny pattern matches   | HTTP `403`, `error.rule: "response_leak"`                |
-| Neither condition        | Original status, exact body bytes, and preserved headers |
+| Condition                         | Client result                                            |
+| --------------------------------- | -------------------------------------------------------- |
+| Body exceeds `max_bytes`          | HTTP `502`, `error.rule: "response_too_large"`           |
+| A deny pattern matches            | HTTP `403`, `error.rule: "response_leak"`                |
+| The origin response is incomplete | HTTP `502`, `error.rule: "origin_unavailable"`           |
+| None of these                     | Original status, exact body bytes, and preserved headers |
 
 Size takes precedence over pattern inspection. Search the body decoded as UTF-8,
 replacing invalid byte sequences for inspection only. When the body is valid
@@ -112,7 +113,9 @@ fails. See the [`encoding/json` documentation](https://pkg.go.dev/encoding/json)
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. Expect HTTP `403` and
+`{"error":{"rule":"response_leak"}}` for the debug request. The tester verifies
+that:
 
 - The debug response above is withheld before any origin content escapes.
 - Escaped JSON values and keys, including `"\u0049NTERNAL_KEY_7F2A"`, are caught
