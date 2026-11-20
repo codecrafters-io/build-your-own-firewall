@@ -113,11 +113,23 @@ original whitespace and escapes when forwarded.
 
 ### Tests
 
-Run `codecrafters test`. The tester checks the escaped preview and clean JSON
-above, and observes the strings sent to the detector for each supported body
-format. A parsed script returns HTTP `403` with `xss-script`. It also checks
-validation failures and byte boundaries. With a four-byte limit, the UTF-8 body
-`éé` is eligible, while `ééa` returns HTTP `413`.
+Run `codecrafters test`. The tester sends the escaped preview above and expects
+HTTP `403`:
+
+```bash
+curl --include http://127.0.0.1:8080/preview \
+  -H 'Content-Type: application/json' \
+  --data-binary '{"comment":"\u003cscript\u003ealert(1)\u003c/script\u003e"}'
+```
+
+```text
+HTTP/1.1 403 Forbidden
+```
+
+A clean JSON body still returns `200` with `Preview: Hello` in the application's
+HTML. The tester also observes the strings sent to the detector for each
+supported body format, and checks validation failures and byte boundaries. With
+a four-byte limit, the UTF-8 body `éé` is eligible, while `ééa` returns HTTP `413`.
 
 ### Notes
 
