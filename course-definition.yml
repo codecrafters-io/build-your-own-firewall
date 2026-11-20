@@ -5,9 +5,9 @@ release_status: alpha
 description_md: |-
   Why do attacks still reach an application that runs behind a firewall?
 
-  A rule matches the raw bytes, and the application decodes them first. An encoded payload such as `%3Cscript%3E` passes a raw rule and still runs as a script. You'll build a gateway that proxies HTTP traffic, inspects decoded paths, queries, headers, and bodies, scores attack signals, and weighs that score with an ML verdict under per-route thresholds. Later stages withhold leaky responses and patch an export endpoint that trusts its caller.
+  A rule matches raw bytes. The application decodes them first, so an encoded payload such as `%3Cscript%3E` can still run as a script. You'll build a firewall that forwards HTTP traffic, removes connection-specific headers, matches attack rules against decoded request inputs, scores their signals, and weighs that score with a supplied detector's verdict under per-route thresholds. Later stages withhold leaky responses and patch an export endpoint that trusts its caller.
 
-  You'll practice proxying, input normalization, threshold tuning, and failure handling.
+  You'll practice proxying, normalization, threshold tuning, and failure handling.
 short_description_md: Learn about reverse proxies, attack rules, ML detection and more
 completion_percentage: 5
 languages:

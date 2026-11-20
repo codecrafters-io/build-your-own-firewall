@@ -1,5 +1,5 @@
-In this stage, you'll clean up proxy headers and return safe errors when the
-origin fails.
+In this stage, you'll remove connection-specific and reserved headers and return
+safe errors when the origin fails.
 
 ### Why own each connection?
 

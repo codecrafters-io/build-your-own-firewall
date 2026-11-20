@@ -21,8 +21,8 @@ The application simulates a leaked private row when the decoded query combines
 `or 1=1` and `--`. Its direct response contains `DUMMY_PRIVATE_HASH`. The tester
 prints that baseline before making the same request through your firewall.
 
-Your firewall must return HTTP `403`, `X-WAF-Score: 5`,
-`X-WAF-Signals: sql-or,sql-comment` (either order), and:
+Your firewall must return HTTP `403`, `X-WAF-Match: heuristic_score`,
+`X-WAF-Score: 5`, `X-WAF-Signals: sql-or,sql-comment` (either order), and:
 
 ```json
 { "error": { "rule": "heuristic_score" } }

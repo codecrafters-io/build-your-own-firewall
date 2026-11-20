@@ -53,13 +53,14 @@ For a nonempty body, replace the earlier raw-body inspection input with:
 | ----------------------------------- | ----------------------------------------------------------------------------- |
 | `application/json`                  | Every string value recursively, including values in nested objects and arrays |
 | `application/x-www-form-urlencoded` | Each decoded parameter value, preserving repetitions                          |
-| `text/plain`                        | The decoded text                                                              |
+| `text/plain`                        | The original UTF-8 text, without percent or plus decoding                     |
 
-Ignore media-type case and parameters such as `; charset=utf-8`. Use the same
-one-layer percent and plus decoding as for queries. A form field without `=`
-contributes an empty value. JSON keys, numbers, booleans, and null
-do not contribute strings. Keep the path, query, and configured header inputs,
-then apply the earlier normalization to every inspection string when enabled.
+Ignore media-type case and parameters such as `; charset=utf-8`. Decode form
+values with the same one-layer percent and plus decoding as for queries. A form
+field without `=` contributes an empty value. JSON keys, numbers, booleans, and
+null do not contribute strings. Keep the path, query, and configured header
+inputs, then apply the earlier normalization to every inspection input when
+enabled.
 
 ### Expected failures and forwarding
 

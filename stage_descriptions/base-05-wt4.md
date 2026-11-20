@@ -49,8 +49,9 @@ The tester then requests `q=tea+cup`. It must still return HTTP `200` with
 
 ### The inspection view
 
-Extra decoding can make harmless text look like an attack: the search application
-decodes `%253Cscript` once to `%3Cscript`, not `<script`. Joining separate inputs
+Extra decoding can make harmless text look like an attack: the search
+application decodes `%253Cscript` once to `%3Cscript`. A second decode would
+produce `<script`, which this stage does not perform. Joining separate inputs
 can likewise invent a match, such as `union` in one parameter and ` select` in
 another. Decode once and inspect inputs separately.
 
@@ -66,7 +67,7 @@ Add these optional policy fields:
 ```
 
 When `normalization` is true, replace the raw-target inspection from earlier
-stages with these separate strings:
+stages with these separate inputs:
 
 | Source  | Inspection input                                                                  |
 | ------- | --------------------------------------------------------------------------------- |
@@ -81,6 +82,9 @@ pair. For a bare parameter without `=`, inspect the entire parameter as a
 separate input. For example, `?union+select` contributes `union select`, while
 `?flag=` contributes an empty string. Preserve repetitions as independent inputs.
 
+Inspect each occurrence of a configured header as a separate input. Do not split
+a header value on commas.
+
 Malformed encodings have no reliable decoded inspection view. Validate percent
 escapes and decoded UTF-8 in the path even when normalization is disabled.
 When normalization is enabled, also validate query names and values. Names in
@@ -88,9 +92,6 @@ When normalization is enabled, also validate query names and values. Names in
 invalid decoded UTF-8 returns HTTP `400`, JSON `error.rule: "invalid_request"`,
 before the origin is contacted. The Notes section covers malformed paths
 rejected by the HTTP server itself.
-
-Inspect each occurrence of a configured header as a separate input. Do not split
-a header value on commas.
 
 NFKC combines compatibility forms such as full-width letters. Case folding
 handles caseless matching, including `Straße` -> `strasse`. For every inspection
@@ -161,8 +162,9 @@ Run `codecrafters test`. The tester verifies that:
 - A malformed path escape may be rejected by the HTTP server before your handler
   runs. It must return HTTP `400`, but its body is not prescribed.
 - JSON escapes and form-encoded bodies are handled in later stages. This stage
-  inspects bare query parameters, but not names in `name=value` pairs or
-  arbitrary headers. Unlisted representations can still evade a rule.
+  inspects query values, bare parameters, and the headers named in
+  `inspect_headers`, but not query names or other headers. Unlisted
+  representations can still evade a rule.
 - Read more about [Unicode normalization](https://www.unicode.org/reports/tr15/)
   and
   [URL encoding](https://url.spec.whatwg.org/#application/x-www-form-urlencoded).

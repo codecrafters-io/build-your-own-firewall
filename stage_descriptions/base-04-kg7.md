@@ -56,14 +56,14 @@ Read the file supplied by `--policy` at startup:
 }
 ```
 
-For now, inspect two strings independently: the raw request target (path plus
+For now, inspect two inputs independently: the raw request target (path plus
 query) and the request body interpreted as UTF-8 text. A match is a literal,
-case-sensitive substring within either string. Do not combine their boundaries
+case-sensitive substring within either input. Do not combine their boundaries
 or decode percent escapes yet. Read rule IDs and terms from policy.
 
 - **Matching order:** Evaluate `denylist` rules in policy order. The first rule
-  whose `term` appears in either inspection string wins, regardless of which
-  string contains the match.
+  whose `term` appears in either inspection input wins, regardless of which
+  input contains the match.
 - **Defaults:** If `mode` is omitted, use `block`. If `denylist` is empty or
   omitted, this stage adds no rule matches. Keep the proxy behavior from earlier
   stages.

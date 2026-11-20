@@ -17,8 +17,8 @@ curl --include 'http://127.0.0.1:8080/search?q=1%27+AND+SLEEP(5)%23'
 ```
 
 The shipped model scores this probe `77`, while the denylist and heuristic
-signals do not match. Expect HTTP `403`, `X-WAF-Score: 0`,
-`X-WAF-Detector-Status: ok`, `X-WAF-ML-Score: 77`, and:
+signals do not match. Expect HTTP `403`, `X-WAF-Match: ml_score`,
+`X-WAF-Score: 0`, `X-WAF-Detector-Status: ok`, `X-WAF-ML-Score: 77`, and:
 
 ```json
 { "error": { "rule": "ml_score" } }
@@ -30,7 +30,7 @@ or sleep operation for this probe.
 
 ### Detector contract
 
-The detector scores inspection strings, and it does not need the client's
+The detector scores inspection inputs, and it does not need the client's
 application credentials. Scoring even known rule matches lets you compare model
 evidence with your rules.
 
@@ -43,10 +43,10 @@ for each inspected request, including requests matching earlier rules. Use
 ```
 
 For the probe above, these inputs are the decoded path, query value, and empty
-body, with no inspected headers. The trailing `""` represents the empty body,
-not an extra placeholder to append.
+body, with no inspected headers. The trailing `""` represents the empty body.
+Do not append an extra placeholder.
 
-Send the current separate inspection strings, using normalized forms when
+Send the current separate inspection inputs, using normalized forms when
 enabled. Input ordering may vary. Preserve every input and its boundary. Send
 configured header inspection values inside `inputs`, but do not copy the
 client's HTTP headers, authentication, or policy into the detector request.
@@ -54,6 +54,12 @@ client's HTTP headers, authentication, or policy into the detector request.
 Health checks and requests rejected during input validation make no detector
 call and include no detector diagnostic headers. An origin `400` response is
 different: inspection and detection have already occurred before forwarding.
+
+Each detector request has a **200 ms total deadline**, including connecting and
+reading response headers and the complete body. Receiving another byte does not
+restart the deadline, so a trickling reply cannot hold the request open. Do not
+retry or follow redirects. Any transport failure, timeout, non-`200` status, or
+invalid response makes detection unavailable.
 
 A successful result is HTTP `200` with exactly one JSON object:
 
@@ -76,12 +82,6 @@ Add this optional policy field:
 Denylist matches have first priority, then the earlier heuristic cutoff. If
 neither matches and the detector score is at least the classifier threshold,
 select `ml_score`. Use the earlier block/log responses.
-
-Each detector request has a **200 ms total deadline**, including connecting and
-reading response headers and the complete body. Receiving another byte does not
-restart the deadline, so a trickling reply cannot hold the request open. Do not
-retry or follow redirects. Any transport failure, timeout, non-`200` status, or
-invalid response makes detection unavailable.
 
 To preserve availability during a detector outage, this challenge uses a
 **fail-open** policy: fall back to the earlier denylist and heuristic rules.
