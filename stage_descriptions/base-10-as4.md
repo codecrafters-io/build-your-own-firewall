@@ -50,7 +50,7 @@ Add an optional `response` object:
 ```
 
 The regular-expression syntax is the same subset used by heuristic signals.
-These patterns are trusted policy, not values supplied by the client or origin.
+These patterns are trusted policy. Clients and origins cannot supply them.
 
 ### Expected behavior
 
@@ -112,7 +112,7 @@ fails. See the [`encoding/json` documentation](https://pkg.go.dev/encoding/json)
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - The debug response above is withheld before any origin content escapes.
 - Escaped JSON values and keys, including `"\u0049NTERNAL_KEY_7F2A"`, are caught

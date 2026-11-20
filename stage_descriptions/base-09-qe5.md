@@ -3,13 +3,14 @@ limit.
 
 ### Why parse request bodies?
 
-Applications decode JSON escapes and form values before using them. Inspect
-those decoded values, and reject bodies you cannot fully inspect.
+Your firewall currently inspects a request body as raw text. Applications decode
+JSON escapes and form values before using them, so inspect those decoded values
+and reject bodies you cannot fully inspect.
 
 ### Catch a JSON-escaped script
 
 The preview route also accepts JSON and form comments. It parses the comment
-before inserting it into HTML. The exercise uses a `4096`-byte inspection limit
+before inserting it into HTML. This stage uses a `4096`-byte inspection limit
 and the earlier detection policies. The tester sends a JSON-escaped script:
 
 ```bash
@@ -42,9 +43,9 @@ Add this optional field:
 ```
 
 When configured, read no more than the limit plus one byte. Measure original
-body bytes, not decoded characters. A body larger than the limit returns HTTP
-`413` and `error.rule: "body_too_large"`. A body exactly at the limit remains
-eligible for inspection.
+body bytes. A decoded character count does not apply. A body larger than the
+limit returns HTTP `413` and `error.rule: "body_too_large"`. A body exactly at
+the limit remains eligible for inspection.
 
 For a nonempty body, replace the earlier raw-body inspection input with:
 
@@ -52,13 +53,14 @@ For a nonempty body, replace the earlier raw-body inspection input with:
 | ----------------------------------- | ----------------------------------------------------------------------------- |
 | `application/json`                  | Every string value recursively, including values in nested objects and arrays |
 | `application/x-www-form-urlencoded` | Each decoded parameter value, preserving repetitions                          |
-| `text/plain`                        | The decoded text                                                              |
+| `text/plain`                        | The original UTF-8 text, without percent or plus decoding                     |
 
-Ignore media-type case and parameters such as `; charset=utf-8`. Use the same
-one-layer percent and plus decoding as for queries. A form field without `=`
-contributes an empty value. JSON keys, numbers, booleans, and null
-do not contribute strings. Keep the path, query, and configured header inputs,
-then apply the earlier normalization to every inspection string when enabled.
+Ignore media-type case and parameters such as `; charset=utf-8`. Decode form
+values with the same one-layer percent and plus decoding as for queries. A form
+field without `=` contributes an empty value. JSON keys, numbers, booleans, and
+null do not contribute strings. Keep the path, query, and configured header
+inputs, then apply the earlier normalization to every inspection input when
+enabled.
 
 ### Expected failures and forwarding
 
@@ -117,7 +119,7 @@ garbage is rejected, while trailing whitespace remains allowed.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - The JSON-escaped preview above is blocked, while clean JSON reaches the
   application unchanged.

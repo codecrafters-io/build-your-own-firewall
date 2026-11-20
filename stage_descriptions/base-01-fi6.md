@@ -1,18 +1,19 @@
-In this stage, you'll start an HTTP server that answers health checks on port
-`8080`.
+In this stage, you'll start an HTTP server on port `8080` that answers health
+checks, even when the application it protects is down.
 
 ### Why start with health checks?
 
 Your firewall will stand between external clients and a protected web
-application. A health check tells the caller whether the firewall is running,
-even when that application is unavailable.
+application. A health check answers the caller directly, without contacting the
+application or the detector, so it is the cheapest way to confirm that your
+process is running.
 
 ```text
 External client -> Your firewall -> Application server
                    /health          (--origin)
 ```
 
-The tester sends this request twice. Each call should print `200`:
+The tester sends this request twice and expects `200` each time:
 
 ```bash
 curl --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:8080/health
@@ -30,7 +31,7 @@ will forward requests to. The detector is a separate service that scores
 inspection inputs in later stages.
 
 Service addresses and policy paths vary between runs. The starter accepts three
-flags so the caller can supply them. Keep this interface throughout the challenge:
+flags so the caller can supply them. Keep this interface for every stage:
 
 | Flag         | Meaning                                                                |
 | ------------ | ---------------------------------------------------------------------- |
@@ -48,15 +49,13 @@ and path:
 ./your_program.sh --origin http://127.0.0.1:8081 --detector http://127.0.0.1:8082 --policy /tmp/policy.json
 ```
 
-Service addresses and the absolute policy path vary between runs. From the next
-stage onward, the tester also starts the application and detector.
+In later stages, the tester also starts the application and detector.
 
 For this stage, the tester uses an empty policy (`{}`) and verifies that:
 
-- `GET /health` returns HTTP `200` within five seconds of startup, including the
-  time spent waiting for the response.
-- Repeated health checks succeed, each within a three-second deadline after
-  startup.
+- `GET /health` returns HTTP `200` within five seconds of startup, counting
+  until the full response arrives.
+- Repeated health checks succeed, each within a three-second deadline.
 
 ### Notes
 

@@ -9,7 +9,7 @@ and an explicit fallback.
 
 ### Detect a probe without a rule match
 
-The coursework detector runs a supplied frozen classifier. With normalization,
+The supplied detector runs a frozen classifier. With normalization,
 the earlier rules, and classifier cutoff `70`, the tester sends:
 
 ```bash
@@ -17,8 +17,8 @@ curl --include 'http://127.0.0.1:8080/search?q=1%27+AND+SLEEP(5)%23'
 ```
 
 The shipped model scores this probe `77`, while the denylist and heuristic
-signals do not match. Expect HTTP `403`, `X-WAF-Score: 0`,
-`X-WAF-Detector-Status: ok`, `X-WAF-ML-Score: 77`, and:
+signals do not match. Expect HTTP `403`, `X-WAF-Match: ml_score`,
+`X-WAF-Score: 0`, `X-WAF-Detector-Status: ok`, `X-WAF-ML-Score: 77`, and:
 
 ```json
 { "error": { "rule": "ml_score" } }
@@ -30,8 +30,9 @@ or sleep operation for this probe.
 
 ### Detector contract
 
-The detector needs inspection strings, not the client's application credentials.
-Scoring even known rule matches lets you compare model evidence with your rules.
+The detector scores inspection inputs, and it does not need the client's
+application credentials. Scoring even known rule matches lets you compare model
+evidence with your rules.
 
 With `classifier` configured, make exactly one `POST` to `<detector>/classify`
 for each inspected request, including requests matching earlier rules. Use
@@ -42,10 +43,10 @@ for each inspected request, including requests matching earlier rules. Use
 ```
 
 For the probe above, these inputs are the decoded path, query value, and empty
-body, with no inspected headers. The trailing `""` represents the empty body,
-not an extra placeholder to append.
+body, with no inspected headers. The trailing `""` represents the empty body.
+Do not append an extra placeholder.
 
-Send the current separate inspection strings, using normalized forms when
+Send the current separate inspection inputs, using normalized forms when
 enabled. Input ordering may vary. Preserve every input and its boundary. Send
 configured header inspection values inside `inputs`, but do not copy the
 client's HTTP headers, authentication, or policy into the detector request.
@@ -53,6 +54,12 @@ client's HTTP headers, authentication, or policy into the detector request.
 Health checks and requests rejected during input validation make no detector
 call and include no detector diagnostic headers. An origin `400` response is
 different: inspection and detection have already occurred before forwarding.
+
+Each detector request has a **200 ms total deadline**, including connecting and
+reading response headers and the complete body. Receiving another byte does not
+restart the deadline, so a trickling reply cannot hold the request open. Do not
+retry or follow redirects. Any transport failure, timeout, non-`200` status, or
+invalid response makes detection unavailable.
 
 A successful result is HTTP `200` with exactly one JSON object:
 
@@ -76,14 +83,8 @@ Denylist matches have first priority, then the earlier heuristic cutoff. If
 neither matches and the detector score is at least the classifier threshold,
 select `ml_score`. Use the earlier block/log responses.
 
-Each detector request has a **200 ms total deadline**, including connecting and
-reading response headers and the complete body. Receiving another byte does not
-restart the deadline, so a trickling reply cannot hold the request open. Do not
-retry or follow redirects. Any transport failure, timeout, non-`200` status, or
-invalid response makes detection unavailable.
-
-To preserve availability during a detector outage, this course uses a
-**fail-open** policy: fall back to the earlier denylist and heuristic rules.
+To preserve availability during a detector outage, use a **fail-open** policy:
+fall back to the earlier denylist and heuristic rules.
 Detector failure alone does not reject the request. Diagnostics make the loss of
 ML protection visible.
 
@@ -101,9 +102,9 @@ body bytes and follow the earlier proxy header rules.
 
 ### Library behavior
 
-**Python:** `http.client.HTTPConnection(timeout=0.2)` limits blocking socket
-operations, not the total request duration. A detector sending one byte at a
-time can keep header or body reads alive past the deadline. A
+**Python:** `http.client.HTTPConnection(timeout=0.2)` limits each blocking socket
+operation. Those limits do not add up to a deadline, so a detector sending one
+byte at a time can keep header or body reads alive past it. A
 `ThreadPoolExecutor` used in a `with` block also waits for running work when
 the block exits, even if `future.result(timeout=0.2)` has raised a timeout.
 Enforce one deadline measured with a monotonic clock across connection,
@@ -115,9 +116,15 @@ documentation.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. It sends the probe above:
 
-- The probe above is blocked with `ml_score`, and a clean search still succeeds.
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=1%27+AND+SLEEP(5)%23'
+```
+
+Expect HTTP `403` with `X-WAF-Match: ml_score`. A clean search still
+succeeds. The tester also verifies that:
+
 - Exact cutoffs and zero scores work with scripted detector responses. A score
   of `70` with cutoff `70` blocks with `ml_score`.
 - Denylist matches still trigger a detector call.
@@ -130,8 +137,8 @@ Scripted responses check integration and fallback independently of model quality
 
 ### Notes
 
-- The coursework detector includes a small pretrained classifier. Its training
-  source and held-out evaluation live in the course source repository under
+- The supplied detector includes a small pretrained classifier. Its training
+  source and held-out evaluation live in the challenge's source repository under
   `model_development`. You integrate inference. Training is not required.
 - Scripted detector scores test your integration and policy behavior. They do
   not measure the supplied model's detection accuracy. The detector is a trusted

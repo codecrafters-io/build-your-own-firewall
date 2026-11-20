@@ -18,9 +18,9 @@ curl --include http://127.0.0.1:8080/api/export \
   --data-binary '{"fields":["name","password_hash"]}'
 ```
 
-The direct application returns `Mira` and `DUMMY_PRIVATE_HASH`. The real model's
-score is below the combined cutoffs, and there is no heuristic match. Your patch
-must stop the request before forwarding: expect HTTP `403`,
+The direct application returns `Mira` and `DUMMY_PRIVATE_HASH`. The supplied
+model's score is below the combined cutoffs, and there is no heuristic match.
+Your patch must stop the request before forwarding: expect HTTP `403`,
 `X-WAF-Match: export-fields`, and:
 
 ```json
@@ -108,7 +108,7 @@ first failing patch's ID, as shown for `export-fields` above.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - Private-field exports are blocked, while public-field exports reach the
   application unchanged.

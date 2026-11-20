@@ -4,10 +4,11 @@ mode.
 ### Why block before forwarding?
 
 Unescaped user input in HTML can run code in another user's browser: a
-Cross-Site Scripting (XSS) attack. Blocking recognizable patterns can catch some
-attempts, but the application still needs to escape input correctly. Rules can
-also match legitimate discussions of HTML, so `log` mode lets you observe
-matches before enforcing them.
+Cross-Site Scripting (XSS) attack. Your firewall currently forwards every request
+to the application. Blocking recognizable patterns can catch some attempts, but
+the application still needs to escape input correctly. Rules can also match
+legitimate discussions of HTML, so `log` mode lets you observe matches before
+enforcing them.
 
 ### Block an unsafe preview
 
@@ -49,20 +50,20 @@ Read the file supplied by `--policy` at startup:
 {
   "mode": "block",
   "denylist": [
-    { "id": "sql-union", "term": "UNION SELECT" },
+    { "id": "sql-union", "term": "union select" },
     { "id": "xss-script", "term": "<script" }
   ]
 }
 ```
 
-For now, inspect two strings independently: the raw request target (path plus
+For now, inspect two inputs independently: the raw request target (path plus
 query) and the request body interpreted as UTF-8 text. A match is a literal,
-case-sensitive substring within either string. Do not combine their boundaries
+case-sensitive substring within either input. Do not combine their boundaries
 or decode percent escapes yet. Read rule IDs and terms from policy.
 
 - **Matching order:** Evaluate `denylist` rules in policy order. The first rule
-  whose `term` appears in either inspection string wins, regardless of which
-  string contains the match.
+  whose `term` appears in either inspection input wins, regardless of which
+  input contains the match.
 - **Defaults:** If `mode` is omitted, use `block`. If `denylist` is empty or
   omitted, this stage adds no rule matches. Keep the proxy behavior from earlier
   stages.
@@ -84,14 +85,14 @@ to the origin.
 Every firewall-generated error uses `Content-Type: application/json` and the
 preview example's error shape, containing only the `error` object and its
 `rule` field. JSON whitespace and string escaping may vary. Set both
-`error.rule` and `X-WAF-Match` to its identifier, even when no denylist matched.
-For example, a forwarding failure replaces the origin response with
-`origin_unavailable`. Later errors follow this convention. Never echo request
+`error.rule` and `X-WAF-Match` to the identifier of the rule that caused the
+error, even when no denylist entry matched. For example, a forwarding failure
+replaces the origin response with `origin_unavailable`. Later errors follow this convention. Never echo request
 content or let a clean request inherit an earlier match.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - The attack preview returns HTTP `200` in log mode and HTTP `403` with
   `{"error":{"rule":"xss-script"}}` in block mode. Both responses carry

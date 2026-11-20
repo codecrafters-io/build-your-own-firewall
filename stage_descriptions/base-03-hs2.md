@@ -1,12 +1,13 @@
-In this stage, you'll clean up proxy headers and return safe errors when the
-origin fails.
+In this stage, you'll remove connection-specific and reserved headers and return
+safe errors when the origin fails.
 
 ### Why own each connection?
 
 Your firewall handles two separate connections: one with the client and one with
-the origin. Headers that control one connection must not control the other. The
-firewall also owns its diagnostics and must replace failed origin responses
-before any origin content reaches the client.
+the origin. It currently forwards both sets of headers unchanged, so a header
+that controls the client connection can also control the origin connection. Only
+the firewall should report its own decisions, and it must replace a failed origin
+response before any origin content reaches the client.
 
 ### Return a safe gateway error
 
@@ -23,8 +24,8 @@ Expect HTTP `502`, `Content-Type: application/json`,
 { "error": { "rule": "origin_unavailable" } }
 ```
 
-The tester also sends a response whose body ends before its declared
-`Content-Length`. Return the same error without releasing the origin's status,
+The tester also has the origin send a response whose body ends before its
+declared `Content-Length`. Return the same error without releasing the origin's status,
 headers, or partial body. Health checks must still return `200` when the origin
 is unavailable.
 
@@ -53,8 +54,8 @@ names, names listed in `Connection`, and the `X-WAF-` prefix case-insensitively:
 - `Connection: X-Temporary` marks `X-Temporary` as connection-specific, even
   though it is not in the fixed list. Remove `Connection`, `Keep-Alive`,
   `Proxy-Authenticate`, `Proxy-Authorization`, `TE`, `Trailer`,
-  `Transfer-Encoding`, and `Upgrade`. Also remove any header named in the
-  comma-separated values across all occurrences of `Connection`.
+  `Transfer-Encoding`, and `Upgrade`. Also remove every header named in any
+  `Connection` value, including values from repeated `Connection` headers.
 - Only your firewall should report its decisions. An origin-supplied
   `X-WAF-Match: xss-script` could falsely label a clean request. Remove headers
   beginning with `X-WAF-` in both directions. After cleanup, add your own
