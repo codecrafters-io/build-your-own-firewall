@@ -1,19 +1,23 @@
-@@ -1,7 +1,12 @@
+@@ -1,50 +1,77 @@
  import argparse
  import http.client
 +import json
  import urllib.parse
  from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-+
-+
+
+
 +HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
 +               "te", "trailer", "transfer-encoding", "upgrade", "content-length"}
- 
- 
++
++
  def main():
-@@ -13,31 +18,53 @@
+     parser = argparse.ArgumentParser()
+     parser.add_argument("--origin", required=True)
+     parser.add_argument("--detector", required=True)
+     parser.add_argument("--policy", required=True)
+     args = parser.parse_args()
      origin = urllib.parse.urlsplit(args.origin)
- 
+
      class Handler(BaseHTTPRequestHandler):
 +        def reject(self, status, rule, diagnostics=None):
 +            payload = json.dumps({"error": {"rule": rule}}).encode()
@@ -66,4 +70,11 @@
 +                self.reject(502, "origin_unavailable", diagnostics)
              finally:
                  connection.close()
- 
+
+         do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request
+
+     ThreadingHTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
+
+
+ if __name__ == "__main__":
+     main()

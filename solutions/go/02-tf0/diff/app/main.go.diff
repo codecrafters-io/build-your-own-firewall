@@ -1,5 +1,6 @@
-@@ -2,35 +2,50 @@
- 
+@@ -1,36 +1,51 @@
+ package main
+
  import (
  	"flag"
 -	"fmt"
@@ -9,7 +10,7 @@
 +	"strings"
 +	"time"
  )
- 
+
 -// Ensures gofmt doesn't remove the "net/http" import in stage 1 (feel free to remove this!)
 -var _ = http.ListenAndServe
 -
