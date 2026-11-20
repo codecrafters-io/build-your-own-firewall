@@ -91,7 +91,18 @@ the firewall.
 
 ### Tests
 
-Run `codecrafters test`. The tester verifies that:
+Run `codecrafters test`. It compares these requests with direct requests to
+the application:
+
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=tea+cup'
+```
+
+```json
+{ "results": [{ "item": "tea cup" }] }
+```
+
+The tester also verifies that:
 
 - The search and article requests above return the expected application
   responses.

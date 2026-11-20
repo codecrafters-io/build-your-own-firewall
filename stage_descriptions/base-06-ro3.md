@@ -117,10 +117,20 @@ and the response reports `X-WAF-Match: heuristic_score`.
 
 ### Tests
 
-Run `codecrafters test`. The tester checks the attack and clean search above,
-then varies signal repetition, input boundaries, and whitespace. A blocking
-match returns HTTP `403` with `X-WAF-Score: 5`. It verifies the complete score
-and fired IDs on client responses, including when a denylist rule wins.
+Run `codecrafters test`. The scored attack must fail:
+
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=or+1%3D1+--'
+```
+
+```text
+HTTP/1.1 403 Forbidden
+X-WAF-Score: 5
+```
+
+The tester checks the attack and clean search above, then varies signal
+repetition, input boundaries, and whitespace. It verifies the complete score and
+fired IDs on client responses, including when a denylist rule wins.
 
 ### Notes
 

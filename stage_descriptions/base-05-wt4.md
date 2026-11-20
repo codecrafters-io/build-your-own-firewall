@@ -137,11 +137,21 @@ original bytes.
 
 ### Tests
 
-Run `codecrafters test`. The tester compares the encoded attack and clean search
-above: the attack returns HTTP `403` with `X-WAF-Match: sql-union`, and the clean
-search still returns HTTP `200`. Other requests check that decoding and
-normalization respect input boundaries, malformed encodings are rejected, and
-log-mode traffic reaches the origin unchanged.
+Run `codecrafters test`. The encoded attack must fail:
+
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=union+select+password+from+users'
+```
+
+```text
+HTTP/1.1 403 Forbidden
+X-WAF-Match: sql-union
+```
+
+The tester compares the encoded attack and clean search above: the clean search
+still returns HTTP `200`. Other requests check that decoding and normalization
+respect input boundaries, malformed encodings are rejected, and log-mode traffic
+reaches the origin unchanged.
 
 ### Notes
 

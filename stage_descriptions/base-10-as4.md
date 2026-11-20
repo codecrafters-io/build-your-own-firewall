@@ -105,12 +105,23 @@ make a truncated body safe to release.
 
 ### Tests
 
-Run `codecrafters test`. The tester checks the debug response above and varies
-how protected content is represented, including escaped JSON keys and repeated
-values. The client receives HTTP `403` with `X-WAF-Match: response_leak`, while a
-body exceeding `max_bytes` returns HTTP `502`. It also checks raw-text fallback
-and log-mode enforcement. Clean responses must pass unchanged within the limit,
-including a body containing only the partial marker `INTERNAL_`.
+Run `codecrafters test`. The debug response must be withheld:
+
+```bash
+curl --include http://127.0.0.1:8080/debug
+```
+
+```text
+HTTP/1.1 403 Forbidden
+X-WAF-Match: response_leak
+```
+
+The tester checks the debug response above and varies how protected content is
+represented, including escaped JSON keys and repeated values. A body exceeding
+`max_bytes` returns HTTP `502` with `error.rule: "response_too_large"`. It also
+checks raw-text fallback and log-mode enforcement. Clean responses must pass
+unchanged within the limit, including a body containing only the partial marker
+`INTERNAL_`.
 
 ### Notes
 

@@ -119,9 +119,23 @@ HTTP `403` with:
 ### Tests
 
 Run `codecrafters test`. The tester first demonstrates the article's false
-positive, then checks that the route override lets it through unchanged with
-HTTP `200`. Scripted scores check exact route matching, decision priority,
-inclusive cutoffs, and outage fallback.
+positive without the override, then restarts with it and repeats the request:
+
+```bash
+curl --include http://127.0.0.1:8080/articles \
+  -H 'Content-Type: text/plain' \
+  --data-binary 'A security article explaining or 1=1 --'
+```
+
+With the `/articles` override the article passes unchanged: HTTP `200`,
+`X-WAF-Score: 5`, `X-WAF-ML-Score: 69`.
+
+```json
+{"article":"A security article explaining or 1=1 --","published":true}
+```
+
+Scripted scores check exact route matching, decision priority, inclusive
+cutoffs, and outage fallback.
 
 The earlier ML-only probe scoring `77`, with no heuristic evidence, is allowed
 under the combined default thresholds. It reaches neither `ml_high: 90` nor

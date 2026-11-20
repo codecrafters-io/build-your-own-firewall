@@ -113,11 +113,23 @@ first failing patch's ID, as shown for `export-fields` above.
 
 ### Tests
 
-Run `codecrafters test`. The tester checks both exports above, varies the
-policy-defined route and argument, and checks invalid request shapes. A
-private-field export is blocked, while a public-field export reaches the
-application unchanged. Patches must remain enforced in log mode and during
-detector outages. Earlier controls are checked again too.
+Run `codecrafters test`. The private-field export must fail:
+
+```bash
+curl --include http://127.0.0.1:8080/api/export \
+  -H 'Content-Type: application/json' \
+  --data-binary '{"fields":["name","password_hash"]}'
+```
+
+```text
+HTTP/1.1 403 Forbidden
+X-WAF-Match: export-fields
+```
+
+The tester checks both exports above, varies the policy-defined route and
+argument, and checks invalid request shapes. The public-field export still
+reaches the application unchanged. Patches must remain enforced in log mode and
+during detector outages. Earlier controls are checked again too.
 
 The same test run replays the earlier controls against the application and
 prints requests, direct application responses, firewall responses, diagnostic

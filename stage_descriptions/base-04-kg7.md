@@ -104,11 +104,21 @@ content or let a clean request inherit an earlier match.
 
 ### Tests
 
-Run `codecrafters test`. The tester compares the unsafe preview in log and block
-modes and checks that the clean preview still works. In block mode the unsafe
-preview returns HTTP `403` with `X-WAF-Match: xss-script`. It checks both the
-client response and whether the application received the request, including
-rule-order and case-sensitive matches.
+Run `codecrafters test`. In block mode the request above must fail:
+
+```bash
+curl --include http://127.0.0.1:8080/preview \
+  -H 'Content-Type: text/plain' --data-binary '<script>alert(1)</script>'
+```
+
+```text
+HTTP/1.1 403 Forbidden
+```
+
+The tester compares the unsafe preview in log and block modes and checks that
+the clean preview still works. A blocked match carries `X-WAF-Match:
+xss-script`. It also checks both the client response and whether the application
+received the request, including rule-order and case-sensitive matches.
 
 ### Notes
 

@@ -109,7 +109,18 @@ body bytes and follow the earlier proxy header rules.
 
 ### Tests
 
-Run `codecrafters test`. The tester checks the probe and clean search above with
+Run `codecrafters test`. The probe must fail with the model's score:
+
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=1%27+AND+SLEEP(5)%23'
+```
+
+```text
+HTTP/1.1 403 Forbidden
+X-WAF-ML-Score: 77
+```
+
+The tester checks the probe and clean search above with
 the supplied model. Scripted detector responses separately check the protocol,
 inclusive cutoffs, and fallback. For example, a score of `70` meets cutoff `70`,
 while a `503` response makes detection unavailable. Slow replies check the total
