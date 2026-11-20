@@ -1,14 +1,15 @@
-Your firewall currently applies separate heuristic and ML cutoffs. In this
-stage, you'll combine those scores using thresholds for each application route,
-so legitimate traffic on one route need not use the same cutoffs as another.
+In this stage, you'll combine heuristic and ML scores using thresholds for each
+application route, so legitimate traffic on one route need not use the same
+cutoffs as another.
 
 ### Why tune decisions by route?
 
-Blocking a legitimate security article because it contains attack examples is
-a **false positive**. A route identifies an application operation by its URL
-path, such as `/articles`. A route override supplies cutoffs for that path in
-place of the default cutoffs. This lets you tune article publishing while
-keeping stricter thresholds elsewhere.
+Your firewall currently applies separate heuristic and ML cutoffs. Blocking a
+legitimate security article because it contains attack examples is a **false
+positive**. A route identifies an application operation by its URL path, such as
+`/articles`. A route override supplies cutoffs for that path in place of the
+default cutoffs. This lets you tune article publishing while keeping stricter
+thresholds elsewhere.
 
 ### Keep a legitimate article working
 
@@ -117,9 +118,10 @@ HTTP `403` with:
 
 ### Tests
 
-The tester first demonstrates the article's false positive, then checks that
-the route override lets it through unchanged. Scripted scores check exact
-route matching, decision priority, inclusive cutoffs, and outage fallback.
+Run `codecrafters test`. The tester first demonstrates the article's false
+positive, then checks that the route override lets it through unchanged with
+HTTP `200`. Scripted scores check exact route matching, decision priority,
+inclusive cutoffs, and outage fallback.
 
 The earlier ML-only probe scoring `77`, with no heuristic evidence, is allowed
 under the combined default thresholds. It reaches neither `ml_high: 90` nor

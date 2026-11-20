@@ -1,12 +1,11 @@
-Your firewall can answer its own health checks. In this stage, you'll forward
-other HTTP requests to the protected application and return its responses to
-the client.
+In this stage, you'll forward HTTP requests to the protected application and
+return its responses to the client.
 
 ### Why proxy requests first?
 
-A **reverse proxy** accepts a client's request, forwards it to the application,
-and returns the response. Get legitimate traffic working before adding
-inspection.
+Your firewall can answer its own health checks. A **reverse proxy** accepts a
+client's request, forwards it to the application, and returns the response. Get
+legitimate traffic working before adding inspection.
 
 ```text
 Client -- GET /search?q=tea+cup --> Firewall --> Origin
@@ -92,7 +91,7 @@ the firewall.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - The search and article requests above return the expected application
   responses.
@@ -109,7 +108,7 @@ The tester verifies that:
   compressed messages, and chunked request bodies are outside the required
   subset. Requests with bodies have a valid `Content-Length`.
   Connection-specific and reserved header cleanup, unavailable origins, and
-  incomplete responses are introduced in the next stage.
+  incomplete responses are introduced in later stages.
 - Each proxied test request has a three-second deadline. Keep the earlier health
   behavior working even when the origin is unavailable. For response status
   semantics, see [HTTP semantics](https://www.rfc-editor.org/rfc/rfc9110.html).

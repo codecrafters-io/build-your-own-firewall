@@ -1,15 +1,15 @@
-Your denylist treats each match as sufficient evidence to block. In this stage,
-you'll also combine weaker attack signals into one request score, so several
-different clues can reach a blocking threshold together.
+In this stage, you'll combine weaker attack signals into one request score,
+so several different clues can reach a blocking threshold together.
 
 ### Why combine weak signals?
 
-In a vulnerable SQL query, `OR 1=1` can make a condition always true, while `--`
-can comment out the remaining SQL. Either fragment can also appear in legitimate
-discussions. **Anomaly scoring** gives each configured signal a weight and adds
-the weights of matching signals. A **threshold** is the cutoff for selecting a
-match. Here, `3 + 2 = 5` reaches the policy's threshold. The score summarizes
-matched signals. It does not estimate the probability of an attack.
+Your denylist treats each match as sufficient evidence to block. In a vulnerable
+SQL query, `OR 1=1` can make a condition always true, while `--` can comment out
+the remaining SQL. Either fragment can also appear in legitimate discussions.
+**Anomaly scoring** gives each configured signal a weight and adds the weights
+of matching signals. A **threshold** is the cutoff for selecting a match. Here,
+`3 + 2 = 5` reaches the policy's threshold. The score summarizes matched
+signals. It does not estimate the probability of an attack.
 
 ### Stop a private-row leak
 
@@ -117,8 +117,9 @@ and the response reports `X-WAF-Match: heuristic_score`.
 
 ### Tests
 
-The tester checks the attack and clean search above, then varies signal
-repetition, input boundaries, and whitespace. It verifies the complete score
+Run `codecrafters test`. The tester checks the attack and clean search above,
+then varies signal repetition, input boundaries, and whitespace. A blocking
+match returns HTTP `403` with `X-WAF-Score: 5`. It verifies the complete score
 and fired IDs on client responses, including when a denylist rule wins.
 
 ### Notes

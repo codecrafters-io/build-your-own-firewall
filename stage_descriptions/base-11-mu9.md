@@ -1,15 +1,16 @@
-Your firewall now checks requests and responses, but a request can pass those
-checks and still exploit an application flaw. In this stage, you'll virtually
-patch an export endpoint by restricting the fields clients may request.
+In this stage, you'll virtually patch an export endpoint by restricting the
+fields clients may request.
 
 ### Why patch an endpoint?
 
-An **endpoint** is an application's HTTP operation, such as `POST /api/export`.
-A **virtual patch** enforces a rule for a known application flaw at the firewall
-while the application awaits a code fix. Here, the export endpoint trusts a
-client's field list and can expose `password_hash` despite rule and ML detection.
-A password hash is a value derived from a password for verification. The
-application uses a dummy value here to represent private data.
+Your firewall now checks requests and responses, yet a request can pass those
+checks and still exploit an application flaw. An **endpoint** is an
+application's HTTP operation, such as `POST /api/export`. A **virtual patch**
+enforces a rule for a known application flaw at the firewall while the
+application awaits a code fix. Here, the export endpoint trusts a client's field
+list and can expose `password_hash` despite rule and ML detection. A password
+hash is a value derived from a password for verification. The application uses a
+dummy value here to represent private data.
 
 ### Stop a private-field export
 
@@ -112,9 +113,11 @@ first failing patch's ID, as shown for `export-fields` above.
 
 ### Tests
 
-The tester checks both exports above, varies the policy-defined route and
-argument, and checks invalid request shapes. Patches must remain enforced in
-log mode and during detector outages. Earlier controls are checked again too.
+Run `codecrafters test`. The tester checks both exports above, varies the
+policy-defined route and argument, and checks invalid request shapes. A
+private-field export is blocked, while a public-field export reaches the
+application unchanged. Patches must remain enforced in log mode and during
+detector outages. Earlier controls are checked again too.
 
 The same test run replays the earlier controls against the application and
 prints requests, direct application responses, firewall responses, diagnostic

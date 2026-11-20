@@ -1,13 +1,13 @@
-Your detectors currently see the body as one text string. In this stage,
-you'll extract values from structured bodies before inspecting them, with a
-strict size limit on the data your firewall reads.
+In this stage, you'll extract values from structured bodies before inspecting
+them, with a strict size limit on the data your firewall reads.
 
 ### Why parse request bodies?
 
-JSON strings can represent characters with escapes. For example, `\u003c`
-represents `<`, so the raw JSON may contain no literal `<script` even though
-the application receives that text after parsing. Form bodies similarly encode
-named values using the percent escapes and `+` convention you've seen in queries.
+Your detectors currently see the body as one text string. JSON strings can
+represent characters with escapes. For example, `\u003c` represents `<`, so the
+raw JSON may contain no literal `<script` even though the application receives
+that text after parsing. Form bodies similarly encode named values using the
+percent escapes and `+` convention you've seen in queries.
 
 Inspect those decoded values to see the content the application uses. Reject
 bodies you cannot fully inspect, rather than treating an unchecked body as clean.
@@ -113,8 +113,9 @@ original whitespace and escapes when forwarded.
 
 ### Tests
 
-The tester checks the escaped preview and clean JSON above, and observes the
-strings sent to the detector for each supported body format. It also checks
+Run `codecrafters test`. The tester checks the escaped preview and clean JSON
+above, and observes the strings sent to the detector for each supported body
+format. A parsed script returns HTTP `403` with `xss-script`. It also checks
 validation failures and byte boundaries. With a four-byte limit, the UTF-8 body
 `éé` is eligible, while `ééa` returns HTTP `413`.
 

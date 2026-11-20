@@ -1,6 +1,5 @@
-A health check lets callers check that your firewall is running before it
-handles application traffic. In this stage, you'll start an HTTP server that
-answers health checks on port `8080`.
+In this stage, you'll start an HTTP server that answers health checks on port
+`8080`.
 
 ### Why start with health checks?
 

@@ -1,13 +1,13 @@
-Your firewall can score the patterns listed in policy. In this stage, you'll
-also call a supplied machine-learning (ML) detector and apply a cutoff to its
-score, so detection can use evidence beyond those hand-written rules.
+In this stage, you'll call a supplied machine-learning (ML) detector and apply a
+cutoff to its score, so detection can use evidence beyond hand-written rules.
 
 ### Why add a detector?
 
-The literal patterns you've been matching are often called **signatures**.
-Machine learning builds a scoring model from examples. This detector was trained
-on attack and legitimate text, and its **classifier** assigns new inputs a
-suspicion score. Using the trained model to score an input is called **inference**.
+Your firewall can score the patterns listed in policy. The literal patterns
+you've been matching are often called **signatures**. Machine learning builds a
+scoring model from examples. This detector was trained on attack and legitimate
+text, and its **classifier** assigns new inputs a suspicion score. Using the
+trained model to score an input is called **inference**.
 
 The model is supplied and frozen, so its learned parameters stay fixed during
 the challenge. Your task is to call it and decide how its result affects the
@@ -109,11 +109,11 @@ body bytes and follow the earlier proxy header rules.
 
 ### Tests
 
-The tester checks the probe and clean search above with the supplied model.
-Scripted detector responses separately check the protocol, inclusive cutoffs,
-and fallback. For example, a score of `70` meets cutoff `70`, while a `503`
-response makes detection unavailable. Slow replies check the total deadline,
-including when headers or body bytes arrive a little at a time.
+Run `codecrafters test`. The tester checks the probe and clean search above with
+the supplied model. Scripted detector responses separately check the protocol,
+inclusive cutoffs, and fallback. For example, a score of `70` meets cutoff `70`,
+while a `503` response makes detection unavailable. Slow replies check the total
+deadline, including when headers or body bytes arrive a little at a time.
 
 ### Notes
 

@@ -1,10 +1,10 @@
-Your proxy already reads complete origin responses before releasing them.
-In this stage, you'll add a size limit and inspect their contents, withholding
+In this stage, you'll add a size limit to origin responses and withhold
 responses that expose a protected pattern or exceed that limit.
 
 ### Why inspect responses before release?
 
-A clean-looking request can trigger a response containing an internal secret.
+Your proxy already reads complete origin responses before releasing them. A
+clean-looking request can trigger a response containing an internal secret.
 Request rules cannot catch a value that appears only in the response. Inspect
 it before releasing any origin status, headers, or body.
 
@@ -105,11 +105,12 @@ make a truncated body safe to release.
 
 ### Tests
 
-The tester checks the debug response above and varies how protected content is
-represented, including escaped JSON keys and repeated values. It also checks
-size limits, raw-text fallback, and log-mode enforcement. Clean responses must
-pass unchanged within the limit, including a body containing only the partial
-marker `INTERNAL_`.
+Run `codecrafters test`. The tester checks the debug response above and varies
+how protected content is represented, including escaped JSON keys and repeated
+values. The client receives HTTP `403` with `X-WAF-Match: response_leak`, while a
+body exceeding `max_bytes` returns HTTP `502`. It also checks raw-text fallback
+and log-mode enforcement. Clean responses must pass unchanged within the limit,
+including a body containing only the partial marker `INTERNAL_`.
 
 ### Notes
 

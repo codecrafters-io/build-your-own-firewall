@@ -1,12 +1,12 @@
-Your proxy currently forwards application requests without inspecting them.
 In this stage, you'll block requests that match configured attack rules, or
 report matches while forwarding in log mode.
 
 ### Why block before forwarding?
 
-HTML describes the content a browser displays and can include executable scripts.
-If an application inserts user input directly into HTML, a submitted `<script>`
-tag can become code that runs in another user's browser. This is a **cross-site
+Your proxy currently forwards application requests without inspecting them. HTML
+describes the content a browser displays and can include executable scripts. If
+an application inserts user input directly into HTML, a submitted `<script>` tag
+can become code that runs in another user's browser. This is a **cross-site
 scripting (XSS)** attack. Escaping input for its HTML context makes the browser
 treat it as text.
 
@@ -104,10 +104,11 @@ content or let a clean request inherit an earlier match.
 
 ### Tests
 
-The tester compares the unsafe preview in log and block modes and checks that
-the clean preview still works. It checks both the client response and whether
-the application received the request, including rule-order and case-sensitive
-matches.
+Run `codecrafters test`. The tester compares the unsafe preview in log and block
+modes and checks that the clean preview still works. In block mode the unsafe
+preview returns HTTP `403` with `X-WAF-Match: xss-script`. It checks both the
+client response and whether the application received the request, including
+rule-order and case-sensitive matches.
 
 ### Notes
 

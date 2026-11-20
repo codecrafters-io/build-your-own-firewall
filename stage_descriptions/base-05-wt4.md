@@ -1,13 +1,13 @@
-Your rules currently inspect the raw target and body. In this stage, you'll
-inspect decoded, normalized inputs so encoded spellings can match a rule while
-forwarded traffic keeps its original bytes.
+In this stage, you'll inspect decoded, normalized inputs so encoded spellings can
+match a rule while forwarded traffic keeps its original bytes.
 
 ### Why normalize only the inspection view?
 
-An application may decode inputs that raw-text rules miss. An **inspection view**
-is a transformed copy used for matching. Forward the original bytes, because
-rewriting them can change what the application receives. It can also break a
-request signature, which checks that the original bytes have not changed.
+Your rules currently inspect the raw target and body. An application may decode
+inputs that raw-text rules miss. An **inspection view** is a transformed copy
+used for matching. Forward the original bytes, because rewriting them can change
+what the application receives. It can also break a request signature, which
+checks that the original bytes have not changed.
 
 URL **percent encoding** writes a byte as `%` followed by two hexadecimal digits.
 For example, `%3C` represents `<` in UTF-8. Query values also use `+` to represent
@@ -137,9 +137,11 @@ original bytes.
 
 ### Tests
 
-The tester compares the encoded attack and clean search above. Other requests
-check that decoding and normalization respect input boundaries, malformed
-encodings are rejected, and log-mode traffic reaches the origin unchanged.
+Run `codecrafters test`. The tester compares the encoded attack and clean search
+above: the attack returns HTTP `403` with `X-WAF-Match: sql-union`, and the clean
+search still returns HTTP `200`. Other requests check that decoding and
+normalization respect input boundaries, malformed encodings are rejected, and
+log-mode traffic reaches the origin unchanged.
 
 ### Notes
 
