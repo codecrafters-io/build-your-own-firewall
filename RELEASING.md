@@ -5,9 +5,11 @@ inbound WAF, and `v3` carries the operability fixes and strengthened grader.
 Keeping the same stage IDs does not make the retired tester compatible. A local
 pass does not update the hosted tester.
 
-The current ten-stage course removes rate limiting (`ou9`). Publish a matching
-tester before updating the hosted course. Response inspection (`as4`) and
-virtual patching (`mu9`) keep their slugs and now occupy Stages 9 and 10.
+The current eleven-stage course splits basic proxying (`tf0`) from header
+cleanup and safe origin failures (`hs2`). Publish a matching tester before
+updating the hosted course. Later stages keep their slugs and move up one
+position. Response inspection (`as4`) and virtual patching (`mu9`) now occupy
+Stages 10 and 11. Rate limiting (`ou9`) remains outside the base course.
 
 The integrated application exercises also require the matching tester. It owns
 the protected application, embeds the frozen model from `model_development`, and

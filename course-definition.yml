@@ -13,10 +13,10 @@ completion_percentage: 5
 languages:
 - slug: go
   release_status: alpha
-  alpha_tester_usernames: ["Kaustav-Bose-Chowdhury"]
+  alpha_tester_usernames: ["Kaustav-Bose-Chowdhury", "aayush0325"]
 - slug: python
   release_status: alpha
-  alpha_tester_usernames: ["Kaustav-Bose-Chowdhury"]
+  alpha_tester_usernames: ["Kaustav-Bose-Chowdhury", "aayush0325"]
 marketing:
   difficulty: hard
   sample_extension_idea_title: Inspect streaming responses
@@ -28,7 +28,7 @@ marketing:
 
       `client -> your firewall -> application server`
 
-      Across ten stages, you'll extend the same program with attack rules, input normalization, rule and ML scores, request-body inspection, and response checks that withhold protected data.
+      Across eleven stages, you'll extend the same program with attack rules, input normalization, rule and ML scores, request-body inspection, and response checks that withhold protected data.
 
       In the final stage, you'll virtually patch a vulnerable export endpoint. Your firewall will block requests for private fields before they reach the application, while keeping legitimate public-field exports working.
   - question_markdown: What exactly will I learn?
@@ -67,6 +67,10 @@ stages:
   name: Proxy web requests
   difficulty: easy
   marketing_md: In this stage, you'll forward HTTP requests and responses between a client and the protected application.
+- slug: hs2
+  name: Clean up headers and fail safely
+  difficulty: medium
+  marketing_md: In this stage, you'll clean up proxy headers and return safe errors when the origin fails.
 - slug: kg7
   name: Block and log
   difficulty: easy

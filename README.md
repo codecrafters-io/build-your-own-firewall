@@ -18,18 +18,19 @@ the WAF permits.
 
 ## Stage progression
 
-| #   | Stage                                                            | Observable result                                                                           |
-| --- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 1   | [Respond to health checks](stage_descriptions/base-01-fi6.md)    | Health checks work without an application or detector.                                      |
-| 2   | [Proxy web requests](stage_descriptions/base-02-tf0.md)          | Methods, targets, bodies, statuses, and end-to-end headers survive forwarding.              |
-| 3   | [Block and log](stage_descriptions/base-03-kg7.md)               | A matched request stops before the origin, or passes with diagnostics in log mode.          |
-| 4   | [Normalize request inputs](stage_descriptions/base-04-wt4.md)    | Encoded or disguised inputs match without rewriting allowed traffic.                        |
-| 5   | [Score attack signals](stage_descriptions/base-05-ro3.md)        | Several weak signals can cross a cutoff without counting repetitions twice.                 |
-| 6   | [Add ML detection](stage_descriptions/base-06-xd5.md)            | A score service is integrated with validation, timeouts, and a visible fallback.            |
-| 7   | [Tune detection decisions](stage_descriptions/base-07-si3.md)    | Route thresholds combine rule and ML evidence; a low ML score cannot cancel strong rules.   |
-| 8   | [Inspect request bodies](stage_descriptions/base-08-qe5.md)      | JSON and form values are inspected; oversized or unsupported bodies never reach the origin. |
-| 9   | [Prevent response leaks](stage_descriptions/base-09-as4.md)      | Protected response content is withheld before any origin bytes escape.                      |
-| 10  | [Virtually patch an endpoint](stage_descriptions/base-10-mu9.md) | Private-field exports are denied while public-field exports still work.                     |
+| #   | Stage                                                                 | Observable result                                                                           |
+| --- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 1   | [Respond to health checks](stage_descriptions/base-01-fi6.md)         | Health checks work without an application or detector.                                      |
+| 2   | [Proxy web requests](stage_descriptions/base-02-tf0.md)               | Methods, targets, bodies, statuses, and end-to-end headers survive forwarding.              |
+| 3   | [Clean up headers and fail safely](stage_descriptions/base-03-hs2.md) | Connection-specific and reserved headers are removed; failed responses become safe errors.  |
+| 4   | [Block and log](stage_descriptions/base-04-kg7.md)                    | A matched request stops before the origin, or passes with diagnostics in log mode.          |
+| 5   | [Normalize request inputs](stage_descriptions/base-05-wt4.md)         | Encoded or disguised inputs match without rewriting allowed traffic.                        |
+| 6   | [Score attack signals](stage_descriptions/base-06-ro3.md)             | Several weak signals can cross a cutoff without counting repetitions twice.                 |
+| 7   | [Add ML detection](stage_descriptions/base-07-xd5.md)                 | A score service is integrated with validation, timeouts, and a visible fallback.            |
+| 8   | [Tune detection decisions](stage_descriptions/base-08-si3.md)         | Route thresholds combine rule and ML evidence; a low ML score cannot cancel strong rules.   |
+| 9   | [Inspect request bodies](stage_descriptions/base-09-qe5.md)           | JSON and form values are inspected; oversized or unsupported bodies never reach the origin. |
+| 10  | [Prevent response leaks](stage_descriptions/base-10-as4.md)           | Protected response content is withheld before any origin bytes escape.                      |
+| 11  | [Virtually patch an endpoint](stage_descriptions/base-11-mu9.md)      | Private-field exports are denied while public-field exports still work.                     |
 
 The tester supplies a customer application with product search, HTML previews,
 article publishing, debug responses, and exports. The main exercises compare its
@@ -62,11 +63,12 @@ application code and a Python runtime are not required in the learner starter.
 The services use loopback and dummy data. No model API key, external service, or
 ML training is required.
 
-Stage 3 shows vulnerable HTML in log mode, then blocks it. Stages 4 and 5 stop
-simulated private-row leaks. Stage 6 exercises real inference; Stage 7 exposes a
-false positive and tunes its route. Stage 8 catches JSON-escaped HTML input,
-Stage 9 withholds an error response containing a key, and Stage 10 stops private
-exports and runs a visible replay of attacks and legitimate traffic.
+Stage 3 cleans up proxy headers and handles origin failures. Stage 4 shows
+vulnerable HTML in log mode, then blocks it. Stages 5 and 6 stop simulated
+private-row leaks. Stage 7 exercises real inference; Stage 8 exposes a false
+positive and tunes its route. Stage 9 catches JSON-escaped HTML input, Stage 10
+withholds an error response containing a key, and Stage 11 stops private exports
+and runs a visible replay of attacks and legitimate traffic.
 
 The final replay reports five blocked attack requests, one withheld response,
 one unblocked detection probe, four preserved legitimate requests, and one hard

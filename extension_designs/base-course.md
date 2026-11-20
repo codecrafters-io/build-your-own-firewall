@@ -6,6 +6,31 @@ against the supplied teaching rubric. The course slug and stage IDs remain
 stable identifiers. Earlier `base-NN-*.md` design records describe the retired
 AI gateway exercises; they are historical, not contracts for this course.
 
+## Proxy stage split, 2026-11-20
+
+The active course now has eleven stages. Basic proxying retains `tf0` at stage
+2. The new stage 3, `hs2`, introduces connection-specific and reserved header
+cleanup, complete-response buffering, and the specified errors for unreachable
+origins and incomplete responses. It is marked medium difficulty. Later stages
+keep their slugs and move up one position. Existing published block/log
+references remain available at stage 4.
+
+The tester defers forged and connection-specific header fixtures and their
+cleanup assertions until stage 3. Both origin-failure scenarios also belong to
+stage 3. All five methods, original request targets, origin Host, repeated
+application headers, origin HTTP errors, and redirects remain in stage 2.
+The finale retains the earlier-contract replay. Verification passed all 22
+Go/Python cumulative references, all 20 preceding-stage rejection checks, and
+the grader regressions, including a new mutation that releases origin headers
+before reading the complete body. All eight published solution diffs reconstruct
+their references, all eleven lesson/metadata mappings and local links validate,
+and all six model checks pass. Manual curl checks passed the documented search
+and article requests, exact targets and Host, offline health, header cleanup,
+and both gateway errors in Go and Python. Build and vet passed. The real tester
+CLI passed `tf0`, `hs2`, and the `mu9` finale for both languages. No hosted
+release or rollout was performed. Earlier dated records below refer to the
+stage ordering used during those reviews.
+
 ## Fresh implementations from the starters, 2026-11-11
 
 Started two separate projects from the compiled Python and Go starters, then

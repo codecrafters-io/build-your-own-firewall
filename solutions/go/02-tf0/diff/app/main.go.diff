@@ -1,9 +1,7 @@
-@@ -1,36 +1,94 @@
+@@ -1,36 +1,51 @@
  package main
 
  import (
-+	"bytes"
-+	"encoding/json"
  	"flag"
 -	"fmt"
 +	"io"
@@ -15,34 +13,7 @@
 
 -// Ensures gofmt doesn't remove the "net/http" import in stage 1 (feel free to remove this!)
 -var _ = http.ListenAndServe
-+var hop = map[string]bool{"Connection": true, "Keep-Alive": true, "Proxy-Authenticate": true,
-+	"Proxy-Authorization": true, "Te": true, "Trailer": true, "Transfer-Encoding": true,
-+	"Upgrade": true, "Content-Length": true}
-+
-+func copyHeaders(destination, source http.Header) {
-+	excluded := map[string]bool{}
-+	for _, name := range strings.Split(strings.Join(source.Values("Connection"), ","), ",") {
-+		excluded[http.CanonicalHeaderKey(strings.TrimSpace(name))] = true
-+	}
-+	for key, values := range source {
-+		if hop[key] || excluded[key] || strings.HasPrefix(strings.ToLower(key), "x-waf-") {
-+			continue
-+		}
-+		destination[key] = append([]string(nil), values...)
-+	}
-+}
-+
-+func reject(w http.ResponseWriter, status int, rule string, diagnostics http.Header) {
-+	for key, values := range diagnostics {
-+		w.Header()[key] = values
-+	}
-+	w.Header().Set("Content-Type", "application/json")
-+	w.Header().Set("X-WAF-Match", rule)
-+	w.Header().Set("Connection", "close")
-+	w.WriteHeader(status)
-+	json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"rule": rule}})
-+}
-
+-
 -// Usage: your_program.sh --origin <url> --detector <url> --policy <path>
  func main() {
 -	flag.String("origin", "", "Origin web application URL")
@@ -68,38 +39,25 @@
  		}
 -		if r.Method != http.MethodGet {
 -			w.WriteHeader(http.StatusMethodNotAllowed)
-+		diagnostics := http.Header{}
-+		var reader io.Reader = r.Body
-+		body, err := io.ReadAll(reader)
++		request, err := http.NewRequestWithContext(r.Context(), r.Method, strings.TrimRight(*origin, "/")+r.URL.RequestURI(), r.Body)
 +		if err != nil {
-+			reject(w, 400, "invalid_request", diagnostics)
++			http.Error(w, "origin unavailable", 502)
  			return
  		}
 -		w.WriteHeader(http.StatusOK)
-+		request, err := http.NewRequestWithContext(r.Context(), r.Method, strings.TrimRight(*origin, "/")+r.URL.RequestURI(), bytes.NewReader(body))
-+		if err != nil {
-+			reject(w, 502, "origin_unavailable", diagnostics)
-+			return
-+		}
-+		copyHeaders(request.Header, r.Header)
++		request.Header = r.Header.Clone()
++		request.ContentLength = r.ContentLength
 +		response, err := client.Do(request)
 +		if err != nil {
-+			reject(w, 502, "origin_unavailable", diagnostics)
++			http.Error(w, "origin unavailable", 502)
 +			return
 +		}
 +		defer response.Body.Close()
-+		var responseReader io.Reader = response.Body
-+		content, err := io.ReadAll(responseReader)
-+		if err != nil {
-+			reject(w, 502, "origin_unavailable", diagnostics)
-+			return
-+		}
-+		copyHeaders(w.Header(), response.Header)
-+		for key, values := range diagnostics {
++		for key, values := range response.Header {
 +			w.Header()[key] = values
 +		}
 +		w.WriteHeader(response.StatusCode)
-+		w.Write(content)
++		io.Copy(w, response.Body)
  	})
 -	if err := http.ListenAndServe(":8080", handler); err != nil {
 -		fmt.Fprintln(os.Stderr, err)
