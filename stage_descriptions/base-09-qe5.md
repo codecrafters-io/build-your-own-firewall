@@ -3,8 +3,9 @@ limit.
 
 ### Why parse request bodies?
 
-Applications decode JSON escapes and form values before using them. Inspect
-those decoded values, and reject bodies you cannot fully inspect.
+Your firewall currently inspects a request body as raw text. Applications decode
+JSON escapes and form values before using them, so inspect those decoded values
+and reject bodies you cannot fully inspect.
 
 ### Catch a JSON-escaped script
 
@@ -42,9 +43,9 @@ Add this optional field:
 ```
 
 When configured, read no more than the limit plus one byte. Measure original
-body bytes, not decoded characters. A body larger than the limit returns HTTP
-`413` and `error.rule: "body_too_large"`. A body exactly at the limit remains
-eligible for inspection.
+body bytes. A decoded character count does not apply. A body larger than the
+limit returns HTTP `413` and `error.rule: "body_too_large"`. A body exactly at
+the limit remains eligible for inspection.
 
 For a nonempty body, replace the earlier raw-body inspection input with:
 

@@ -2,7 +2,12 @@ slug: firewall
 name: Build your own Firewall
 short_name: Firewall
 release_status: alpha
-description_md: Build an inbound HTTP firewall that protects a web application. Start with a working reverse proxy, then add attack rules, evasion handling, machine-learning scores, and resource limits. Finish by virtually patching a vulnerable endpoint while keeping legitimate requests working.
+description_md: |-
+  Why do attacks still reach an application that runs behind a firewall?
+
+  A rule matches the raw bytes, and the application decodes them first. An encoded payload such as `%3Cscript%3E` passes a raw rule and still runs as a script. You'll build a gateway that proxies HTTP traffic, inspects decoded paths, queries, headers, and bodies, scores attack signals, and weighs that score with an ML verdict under per-route thresholds. Later stages withhold leaky responses and patch an export endpoint that trusts its caller.
+
+  You'll practice proxying, input normalization, threshold tuning, and failure handling.
 short_description_md: Learn about reverse proxies, attack rules, ML detection and more
 completion_percentage: 5
 languages:

@@ -4,10 +4,11 @@ mode.
 ### Why block before forwarding?
 
 Unescaped user input in HTML can run code in another user's browser: a
-Cross-Site Scripting (XSS) attack. Blocking recognizable patterns can catch some
-attempts, but the application still needs to escape input correctly. Rules can
-also match legitimate discussions of HTML, so `log` mode lets you observe
-matches before enforcing them.
+Cross-Site Scripting (XSS) attack. Your firewall currently forwards every request
+to the application. Blocking recognizable patterns can catch some attempts, but
+the application still needs to escape input correctly. Rules can also match
+legitimate discussions of HTML, so `log` mode lets you observe matches before
+enforcing them.
 
 ### Block an unsafe preview
 
@@ -84,9 +85,9 @@ to the origin.
 Every firewall-generated error uses `Content-Type: application/json` and the
 preview example's error shape, containing only the `error` object and its
 `rule` field. JSON whitespace and string escaping may vary. Set both
-`error.rule` and `X-WAF-Match` to its identifier, even when no denylist matched.
-For example, a forwarding failure replaces the origin response with
-`origin_unavailable`. Later errors follow this convention. Never echo request
+`error.rule` and `X-WAF-Match` to the identifier of the rule that caused the
+error, even when no denylist entry matched. For example, a forwarding failure
+replaces the origin response with `origin_unavailable`. Later errors follow this convention. Never echo request
 content or let a clean request inherit an earlier match.
 
 ### Tests

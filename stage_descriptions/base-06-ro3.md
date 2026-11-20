@@ -4,8 +4,10 @@ In this stage, you'll combine weighted attack signals into one request score.
 
 In a vulnerable SQL query, `OR 1=1` can make a condition always true, while `--`
 can comment out the remaining SQL. Either fragment can also appear in legitimate
-discussions. **Anomaly scoring** combines their weights: `3 + 2 = 5` reaches the
-policy's threshold. The score measures matched signals, not attack probability.
+discussions, and your current rules match only one complete term at a time.
+**Anomaly scoring** combines their weights: `3 + 2 = 5` reaches the policy's
+threshold. The score counts matched evidence. It does not estimate an attack's
+probability.
 
 ### Stop a private-row leak
 
@@ -28,7 +30,7 @@ Your firewall must return HTTP `403`, `X-WAF-Score: 5`,
 
 The application must receive no forwarded attack. A clean `q=tea+cup` search
 still returns `200` with product results. These are simulated SQL-injection
-consequences, not executed SQL.
+consequences. No SQL runs in the application.
 
 ### Policy
 
@@ -113,9 +115,10 @@ The tester verifies that:
   `{"error":{"rule":"heuristic_score"}}`, `X-WAF-Score: 5`, and
   `X-WAF-Signals: sql-or,sql-comment` in either signal order. The attack never
   reaches the application.
-- A clean search returns HTTP `200` with clean-request diagnostics.
+- A clean search returns HTTP `200` with `X-WAF-Score: 0` and no fired signal
+  IDs.
 - Repeated signal matches count only once. Missing, repeated, or extra signal
-  IDs fail; either ID order is accepted.
+  IDs fail. Either ID order is accepted.
 - Denylist matches take precedence while retaining the full heuristic score and
   all fired signal IDs.
 - Whitespace matching uses the same characters in Go and Python.
@@ -127,8 +130,8 @@ The tester verifies that:
   `re`, without flags or backreferences. Whitespace shorthands `\s` and `\S`
   are outside this shared subset because their character sets differ by
   language. Use explicit classes instead.
-- The patterns are small teaching examples, not a complete SQL injection
-  detector.
+- The patterns are small teaching examples. They are not a complete SQL
+  injection detector.
 - The
   [OWASP CRS anomaly-scoring documentation](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/)
   explains the broader separation of detection and enforcement.

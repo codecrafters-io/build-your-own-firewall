@@ -132,8 +132,8 @@ as attack probes when tuning policy.
 
 ### Notes
 
-- These are teaching thresholds, not production recommendations. A route
-  override changes score thresholds. It cannot disable denylist matches or the
+- These are teaching thresholds. They are not production recommendations. A
+  route override changes score thresholds. It cannot disable denylist matches or the
   size, response, and virtual-patch controls covered in later stages.
 - Each thresholds object supplies all four fields as positive integers.
   Inspection normalization must not change application routing.

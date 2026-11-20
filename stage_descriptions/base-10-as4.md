@@ -50,7 +50,7 @@ Add an optional `response` object:
 ```
 
 The regular-expression syntax is the same subset used by heuristic signals.
-These patterns are trusted policy, not values supplied by the client or origin.
+These patterns are trusted policy. Clients and origins cannot supply them.
 
 ### Expected behavior
 

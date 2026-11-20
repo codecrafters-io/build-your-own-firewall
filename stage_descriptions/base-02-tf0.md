@@ -4,8 +4,8 @@ the protected application.
 ### Why proxy requests first?
 
 A **reverse proxy** accepts a client's request, forwards it to the application,
-and returns the response. Get legitimate traffic working before adding
-inspection.
+and returns the response. So far your firewall answers `/health` and nothing
+else. Get legitimate traffic working before adding inspection.
 
 ```text
 Client -- GET /search?q=tea+cup --> Firewall --> Origin
@@ -53,7 +53,7 @@ the supplied origin URL.
 | Direction | Preserve                                                                                              | Adjust                                                    |
 | --------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | Request   | Method, path, query, body bytes, and end-to-end headers, including `Authorization` and `Content-Type` | The upstream `Host` must name the origin host and port.   |
-| Response  | Status, body bytes, and end-to-end headers, including `Content-Type` and `X-Request-Id`               | Framing headers must describe the body you actually send. |
+| Response  | Status, body bytes, and end-to-end headers, including `Content-Type` and `X-Request-Id`               | `Content-Length` must describe the body you actually send. |
 
 Preserve JSON whitespace and escaping, empty bodies, and unknown fields.
 
@@ -81,7 +81,7 @@ The tester verifies that:
   compressed messages, and chunked request bodies are outside the required
   subset. Requests with bodies have a valid `Content-Length`.
   Connection-specific and reserved header cleanup, unavailable origins, and
-  incomplete responses are introduced in the next stage.
+  incomplete responses are introduced in later stages.
 - Each proxied test request has a three-second deadline. Keep the earlier health
   behavior working even when the origin is unavailable. For response status
   semantics, see [HTTP semantics](https://www.rfc-editor.org/rfc/rfc9110.html).
