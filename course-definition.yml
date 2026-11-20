@@ -1,7 +1,7 @@
 slug: firewall
 name: Build your own Firewall
 short_name: Firewall
-release_status: alpha
+release_status: early_access
 description_md: |-
   Why do attacks still reach an application that runs behind a firewall?
 
@@ -12,11 +12,7 @@ short_description_md: Learn about reverse proxies, attack rules, ML detection an
 completion_percentage: 5
 languages:
 - slug: go
-  release_status: alpha
-  alpha_tester_usernames: ["Kaustav-Bose-Chowdhury", "aayush0325"]
 - slug: python
-  release_status: alpha
-  alpha_tester_usernames: ["Kaustav-Bose-Chowdhury", "aayush0325"]
 marketing:
   difficulty: hard
   sample_extension_idea_title: Inspect streaming responses
