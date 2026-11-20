@@ -1,0 +1,31 @@
+@@ -3,6 +3,7 @@
+ import json
+ import urllib.parse
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
++from pathlib import Path
+ 
+ 
+ HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+@@ -16,6 +17,7 @@
+     parser.add_argument("--policy", required=True)
+     args = parser.parse_args()
+     origin = urllib.parse.urlsplit(args.origin)
++    policy = json.loads(Path(args.policy).read_text())
+ 
+     class Handler(BaseHTTPRequestHandler):
+         def reject(self, status, rule, diagnostics=None):
+@@ -41,6 +43,14 @@
+             diagnostics = {}
+             length = int(self.headers.get("Content-Length", 0))
+             body = self.rfile.read(length)
++            inputs = [self.path, body.decode("utf-8", errors="replace")]
++            match = next((rule["id"] for rule in policy.get("denylist", [])
++                          if any(rule["term"] in value for value in inputs)), None)
++            if match:
++                if policy.get("mode", "block") == "block":
++                    self.reject(403, match, diagnostics)
++                    return
++                diagnostics["X-WAF-Match"] = match
+             connection = http.client.HTTPConnection(origin.hostname, origin.port, timeout=3)
+             try:
+                 excluded = HOP_HEADERS | {name.strip().lower() for name in ",".join(self.headers.get_all("Connection", [])).split(",")}

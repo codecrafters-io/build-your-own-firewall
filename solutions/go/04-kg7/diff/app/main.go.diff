@@ -1,0 +1,58 @@
+@@ -39,13 +39,40 @@
+ 	json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"rule": rule}})
+ }
+ 
++type Rule struct {
++	ID   string `json:"id"`
++	Term string `json:"term"`
++}
++type Policy struct {
++	Mode     string `json:"mode"`
++	Denylist []Rule `json:"denylist"`
++}
++
++func literalMatch(policy Policy, inputs []string) string {
++	for _, rule := range policy.Denylist {
++		for _, value := range inputs {
++			if strings.Contains(value, rule.Term) {
++				return rule.ID
++			}
++		}
++	}
++	return ""
++}
++
+ func main() {
+ 	origin := flag.String("origin", "", "Origin web application URL")
+ 	detector := flag.String("detector", "", "ML detector URL")
+ 	policyPath := flag.String("policy", "", "Trusted policy JSON file")
+ 	flag.Parse()
+ 	_ = detector
+-	_ = policyPath
++	data, err := os.ReadFile(*policyPath)
++	if err != nil {
++		panic(err)
++	}
++	var policy Policy
++	if err := json.Unmarshal(data, &policy); err != nil {
++		panic(err)
++	}
+ 	client := &http.Client{Timeout: 3 * time.Second,
+ 		Transport:     &http.Transport{DisableCompression: true},
+ 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+@@ -60,6 +87,15 @@
+ 		if err != nil {
+ 			reject(w, 400, "invalid_request", diagnostics)
+ 			return
++		}
++		inputs := []string{r.URL.RequestURI(), string(body)}
++		match := literalMatch(policy, inputs)
++		if match != "" {
++			if policy.Mode != "log" {
++				reject(w, 403, match, diagnostics)
++				return
++			}
++			diagnostics.Set("X-WAF-Match", match)
+ 		}
+ 		request, err := http.NewRequestWithContext(r.Context(), r.Method, strings.TrimRight(*origin, "/")+r.URL.RequestURI(), bytes.NewReader(body))
+ 		if err != nil {
