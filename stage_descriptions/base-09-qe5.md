@@ -10,7 +10,7 @@ and reject bodies you cannot fully inspect.
 ### Catch a JSON-escaped script
 
 The preview route also accepts JSON and form comments. It parses the comment
-before inserting it into HTML. The exercise uses a `4096`-byte inspection limit
+before inserting it into HTML. This stage uses a `4096`-byte inspection limit
 and the earlier detection policies. The tester sends a JSON-escaped script:
 
 ```bash
@@ -118,7 +118,7 @@ garbage is rejected, while trailing whitespace remains allowed.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - The JSON-escaped preview above is blocked, while clean JSON reaches the
   application unchanged.

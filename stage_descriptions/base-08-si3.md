@@ -114,7 +114,7 @@ HTTP `403` with:
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - The article above is blocked under default thresholds and reaches the
   application unchanged with the `/articles` override.

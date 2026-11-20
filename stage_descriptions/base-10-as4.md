@@ -112,7 +112,7 @@ fails. See the [`encoding/json` documentation](https://pkg.go.dev/encoding/json)
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - The debug response above is withheld before any origin content escapes.
 - Escaped JSON values and keys, including `"\u0049NTERNAL_KEY_7F2A"`, are caught

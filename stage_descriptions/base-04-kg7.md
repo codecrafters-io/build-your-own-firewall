@@ -50,7 +50,7 @@ Read the file supplied by `--policy` at startup:
 {
   "mode": "block",
   "denylist": [
-    { "id": "sql-union", "term": "UNION SELECT" },
+    { "id": "sql-union", "term": "union select" },
     { "id": "xss-script", "term": "<script" }
   ]
 }
@@ -92,7 +92,7 @@ content or let a clean request inherit an earlier match.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - The attack preview returns HTTP `200` in log mode and HTTP `403` with
   `{"error":{"rule":"xss-script"}}` in block mode. Both responses carry

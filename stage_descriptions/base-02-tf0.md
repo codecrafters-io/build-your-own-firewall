@@ -15,7 +15,7 @@ Client <-- 200 + response body -- Firewall <-- Origin
 ### Forward a search and an article
 
 The tester supplies one application with product search, article publishing,
-HTML previews, and record exports. You will protect it throughout the course.
+HTML previews, and record exports. You will protect it throughout the challenge.
 You only implement the firewall. All records and secrets are dummy data.
 
 The tester compares direct and proxied responses, starting with a product
@@ -64,7 +64,7 @@ the firewall.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - The search and article requests above return the expected application
   responses.

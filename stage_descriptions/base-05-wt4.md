@@ -7,9 +7,9 @@ Your rules currently match the raw request target and body. An application may
 decode inputs that raw-byte rules miss, so an attack can pass this check and
 still reach the application in a form it understands. An _inspection view_ is a
 transformed copy used for matching. Forward the original bytes, because
-rewriting them can change a request's meaning or break a signature. This course
-uses a fixed pipeline. Production inspection must reflect the application's
-actual input handling.
+rewriting them can change a request's meaning or break a signature. This
+challenge uses a fixed pipeline. Production inspection must reflect the
+application's actual input handling.
 
 ### Catch an encoded search
 
@@ -143,7 +143,7 @@ described above and check decoding errors for both names and values. See the
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - The encoded `union+select` search returns HTTP `403` with
   `X-WAF-Match: sql-union` and `{"error":{"rule":"sql-union"}}`, without

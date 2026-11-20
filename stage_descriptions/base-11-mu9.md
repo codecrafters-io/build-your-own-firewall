@@ -108,7 +108,7 @@ first failing patch's ID, as shown for `export-fields` above.
 
 ### Tests
 
-The tester verifies that:
+Run `codecrafters test`. The tester verifies that:
 
 - Private-field exports are blocked, while public-field exports reach the
   application unchanged.
