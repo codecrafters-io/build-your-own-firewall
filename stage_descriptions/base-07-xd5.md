@@ -116,9 +116,15 @@ documentation.
 
 ### Tests
 
-Run `codecrafters test`. The tester verifies that:
+Run `codecrafters test`. It sends the probe above:
 
-- The probe above is blocked with `ml_score`, and a clean search still succeeds.
+```bash
+curl --include 'http://127.0.0.1:8080/search?q=1%27+AND+SLEEP(5)%23'
+```
+
+Expect HTTP `403` with `X-WAF-Match: ml_score`. A clean search still
+succeeds. The tester also verifies that:
+
 - Exact cutoffs and zero scores work with scripted detector responses. A score
   of `70` with cutoff `70` blocks with `ml_score`.
 - Denylist matches still trigger a detector call.
