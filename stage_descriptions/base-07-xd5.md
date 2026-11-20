@@ -83,8 +83,8 @@ Denylist matches have first priority, then the earlier heuristic cutoff. If
 neither matches and the detector score is at least the classifier threshold,
 select `ml_score`. Use the earlier block/log responses.
 
-To preserve availability during a detector outage, this challenge uses a
-**fail-open** policy: fall back to the earlier denylist and heuristic rules.
+To preserve availability during a detector outage, use a **fail-open** policy:
+fall back to the earlier denylist and heuristic rules.
 Detector failure alone does not reject the request. Diagnostics make the loss of
 ML protection visible.
 

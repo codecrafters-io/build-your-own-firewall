@@ -31,7 +31,7 @@ will forward requests to. The detector is a separate service that scores
 inspection inputs in later stages.
 
 Service addresses and policy paths vary between runs. The starter accepts three
-flags so the caller can supply them. Keep this interface throughout the challenge:
+flags so the caller can supply them. Keep this interface for every stage:
 
 | Flag         | Meaning                                                                |
 | ------------ | ---------------------------------------------------------------------- |

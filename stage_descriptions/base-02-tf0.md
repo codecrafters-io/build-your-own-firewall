@@ -77,7 +77,7 @@ Run `codecrafters test`. The tester verifies that:
 - The tester owns the application and detector. Your launch command starts only
   the firewall. The `curl` commands describe requests made inside the test
   environment. Running them separately requires services at those addresses.
-- This challenge uses complete, non-streaming HTTP messages. HEAD, upgrades,
+- Every stage uses complete, non-streaming HTTP messages. HEAD, upgrades,
   compressed messages, and chunked request bodies are outside the required
   subset. Requests with bodies have a valid `Content-Length`.
   Connection-specific and reserved header cleanup, unavailable origins, and
