@@ -10,7 +10,7 @@ stricter thresholds elsewhere.
 ### Keep a legitimate article working
 
 The application accepts legitimate security articles containing attack examples.
-The tester submits this article using the real classifier:
+The tester submits this article using the supplied classifier:
 
 ```bash
 curl --include http://127.0.0.1:8080/articles \
