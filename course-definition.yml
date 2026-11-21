@@ -12,7 +12,9 @@ short_description_md: Learn about reverse proxies, attack rules, ML detection an
 completion_percentage: 5
 languages:
 - slug: go
+  alpha_tester_usernames: ["Kaustav-Bose-Chowdhury", "aayush0325"]
 - slug: python
+  alpha_tester_usernames: ["Kaustav-Bose-Chowdhury", "aayush0325"]
 marketing:
   difficulty: hard
   sample_extension_idea_title: Inspect streaming responses
